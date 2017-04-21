@@ -1,1 +1,1 @@
-# MustGAN
+# MusTGAN
