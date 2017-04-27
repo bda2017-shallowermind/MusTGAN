@@ -35,7 +35,7 @@ tf.app.flags.DEFINE_string("wavdir", "",
 tf.app.flags.DEFINE_string("savedir", "", "Where to save the embeddings.")
 tf.app.flags.DEFINE_string("config", "h512_bo16", "Model configuration name")
 tf.app.flags.DEFINE_integer("sample_length", 64000, "Sample length.")
-tf.app.flags.DEFINE_integer("batch_size", 16, "Sample length.")
+tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size.")
 tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
