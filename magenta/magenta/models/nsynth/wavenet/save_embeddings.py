@@ -125,7 +125,7 @@ def main(unused_argv=None):
       try:
         encoding = sess.run(
             graph_encoding, feed_dict={wav_placeholder: wavdata})
-        for num, (wavfile, enc) in enumerate(zip(wavfiles, encoding)):
+        for num, (wavfile, enc) in enumerate(zip(files, encoding)):
           filename = "%s_embeddings.npy" % wavfile.split("/")[-1].strip(".wav")
           with tf.gfile.Open(os.path.join(savedir, filename), "w") as f:
             np.save(f, enc)
