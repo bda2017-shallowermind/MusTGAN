@@ -86,7 +86,7 @@ def main(unused_argv=None):
       # build the model graph
       encode_dict = config.encode(inputs_dict["wav"])
       decode_dict = config.decode(encode_dict["encoding"])
-      loss_dict = config.loss(encode_dict["x_quantized", decode_dict["logits"]])
+      loss_dict = config.loss(encode_dict["x_quantized"], decode_dict["logits"])
       loss = loss_dict["loss"]
       tf.summary.scalar("train_loss", loss)
 

@@ -166,7 +166,7 @@ def deconv1d(x,
   if filter_length > 1 and causal:
     x_ttb = tf.pad(x_ttb, [[0, 0], [filter_length - 1, 0], [0, 0]])
 
-  output_shape = [batch_size * dilation, length / dilation, num_filters]
+  output_shape = [batch_size * dilation, 1, length / dilation, num_filters]
   x_ttb_shape = x_ttb.get_shape().as_list()
   x_4d = tf.reshape(x_ttb, [x_ttb_shape[0], 1,
                             x_ttb_shape[1], num_input_channels])

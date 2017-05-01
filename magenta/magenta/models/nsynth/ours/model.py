@@ -18,7 +18,7 @@ import tensorflow as tf
 
 from magenta.models.nsynth import reader
 from magenta.models.nsynth import utils
-from magenta.models.nsynth.wavenet import masked
+from magenta.models.nsynth.ours import masked
 
 
 class Config(object):
@@ -41,6 +41,7 @@ class Config(object):
     self.ae_num_layers = 30
     self.ae_filter_length = 3
     self.ae_width = 128
+    self.ae_bottleneck_width = 16
     self.train_path = train_path
 
   def get_batch(self, batch_size):
@@ -49,7 +50,14 @@ class Config(object):
     return data_train.get_wavenet_batch(batch_size, length=6144)
 
   def encode(self, inputs, reuse=False):
+    ae_num_stages = self.ae_num_stages
+    ae_num_layers = self.ae_num_layers
+    ae_filter_length = self.ae_filter_length
+    ae_width = self.ae_width
+    ae_bottleneck_width = self.ae_bottleneck_width
+
     # Encode the source with 8-bit Mu-Law.
+    x = inputs
     x_quantized = utils.mu_law(x)
     x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
     x_scaled = tf.expand_dims(x_scaled, 2)
@@ -93,6 +101,11 @@ class Config(object):
     }
 
   def decode(self, encoding, reuse=False):
+    ae_num_stages = self.ae_num_stages
+    ae_num_layers = self.ae_num_layers
+    ae_filter_length = self.ae_filter_length
+    ae_width = self.ae_width
+
     with tf.variable_scope("decoder", reuse=reuse):
       de = encoding
 
@@ -102,31 +115,32 @@ class Config(object):
           filter_length=1,
           name='ae_bottleneck')
 
-    # Residual blocks with skip connections.
-    for i in xrange(num_layers):
-      dilation = 2**(num_stages - (i % num_stages) - 1)
-      d = tf.nn.relu(de)
-      d = masked.deconv1d(
-          d,
-          causal=False,
-          num_filters=ae_width,
-          filter_length=ae_filter_length,
-          dilation=dilation,
-          name='ae_dilateddeconv_%d' % (i + 1))
-      d = tf.nn.relu(d)
-      de += masked.conv1d(
-          d,
-          num_filters=ae_width,
-          filter_length=1,
-          name='ae_res_%d' % (i + 1))
+      # Residual blocks with skip connections.
+      for i in xrange(ae_num_layers):
+        dilation = 2**(ae_num_stages - (i % ae_num_stages) - 1)
+        d = tf.nn.relu(de)
+        d = masked.deconv1d(
+            d,
+            causal=False,
+            num_filters=ae_width,
+            filter_length=ae_filter_length,
+            dilation=dilation,
+            name='ae_dilateddeconv_%d' % (i + 1))
+        d = tf.nn.relu(d)
+        de += masked.conv1d(
+            d,
+            num_filters=ae_width,
+            filter_length=1,
+            name='ae_res_%d' % (i + 1))
 
-    logits = masked.deconv1d(
-        de,
-        num_filters=256,
-        filter_length=ae_filter_length,
-        name='logits')
-    logits = tf.reshape(logits, [-1, 256])
-    probs = tf.nn.softmax(logits, name='softmax')
+      logits = masked.deconv1d(
+          de,
+          num_filters=256,
+          filter_length=ae_filter_length,
+          name='logits')
+      logits = tf.reshape(logits, [-1, 256])
+      probs = tf.nn.softmax(logits, name='softmax')
+
     return {
         'predictions': probs,
         'logits': logits,
