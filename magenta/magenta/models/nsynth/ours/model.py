@@ -49,46 +49,43 @@ class Config(object):
     return data_train.get_wavenet_batch(batch_size, length=6144)
 
   def encode(self, inputs, reuse=False):
-    # variable name changed! need check
-    with tf.variable_scope("encoder", reuse=reuse):
-      # Encode the source with 8-bit Mu-Law.
-      x = inputs['wav']
-      x_quantized = utils.mu_law(x)
-      x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
-      x_scaled = tf.expand_dims(x_scaled, 2)
+    # Encode the source with 8-bit Mu-Law.
+    x_quantized = utils.mu_law(x)
+    x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
+    x_scaled = tf.expand_dims(x_scaled, 2)
 
-      en = masked.conv1d(
-          x_scaled,
+    en = masked.conv1d(
+        x_scaled,
+        causal=False,
+        num_filters=ae_width,
+        filter_length=ae_filter_length,
+        name='ae_startconv')
+
+    for num_layer in xrange(ae_num_layers):
+      dilation = 2**(num_layer % ae_num_stages)
+      d = tf.nn.relu(en)
+      d = masked.conv1d(
+          d,
           causal=False,
           num_filters=ae_width,
           filter_length=ae_filter_length,
-          name='ae_startconv')
-
-      for num_layer in xrange(ae_num_layers):
-        dilation = 2**(num_layer % ae_num_stages)
-        d = tf.nn.relu(en)
-        d = masked.conv1d(
-            d,
-            causal=False,
-            num_filters=ae_width,
-            filter_length=ae_filter_length,
-            dilation=dilation,
-            name='ae_dilatedconv_%d' % (num_layer + 1))
-        d = tf.nn.relu(d)
-        en += masked.conv1d(
-            d,
-            num_filters=ae_width,
-            filter_length=1,
-            name='ae_res_%d' % (num_layer + 1))
-
-      en = masked.conv1d(
-          en,
-          num_filters=self.ae_bottleneck_width,
+          dilation=dilation,
+          name='ae_dilatedconv_%d' % (num_layer + 1))
+      d = tf.nn.relu(d)
+      en += masked.conv1d(
+          d,
+          num_filters=ae_width,
           filter_length=1,
-          name='ae_bottleneck')
+          name='ae_res_%d' % (num_layer + 1))
 
-      # pooling is optional
-      # en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
+    en = masked.conv1d(
+        en,
+        num_filters=self.ae_bottleneck_width,
+        filter_length=1,
+        name='ae_bottleneck')
+
+    # pooling is optional
+    # en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
 
     return {
         'x_quantized': x_quantized,
@@ -135,7 +132,7 @@ class Config(object):
         'logits': logits,
     }
 
-  def loss(self, x_quantized, logits)
+  def loss(self, x_quantized, logits):
     x_indices = tf.cast(tf.reshape(x_quantized, [-1]), tf.int32) + 128
     loss = tf.reduce_mean(
         tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -144,5 +141,5 @@ class Config(object):
         name='loss')
 
     return {
-        'loss': loss
+        'loss': loss,
     }
