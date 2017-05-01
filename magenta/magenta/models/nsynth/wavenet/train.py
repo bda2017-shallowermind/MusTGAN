@@ -48,6 +48,10 @@ tf.app.flags.DEFINE_string("train_path", "", "The path to the train tfrecord.")
 tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
+tf.app.flags.DEFINE_integer("num_iters", 1000,
+                            "Number of iterations.")
+tf.app.flags.DEFINE_integer("log_period", 250,
+                            "Log the curr loss after every log_period steps.")
 
 
 def main(unused_argv=None):
@@ -57,7 +61,7 @@ def main(unused_argv=None):
     raise RuntimeError("No config name specified.")
 
   config = utils.get_module("wavenet." + FLAGS.config).Config(
-      FLAGS.train_path)
+      FLAGS.train_path, FLAGS.num_iters)
 
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)
@@ -107,11 +111,8 @@ def main(unused_argv=None):
           variable_averages=ema,
           variables_to_average=tf.trainable_variables())
 
-      train_op = opt.minimize(
-          loss,
-          global_step=global_step,
-          name="train",
-          colocate_gradients_with_ops=True)
+      train_op = slim.learning.create_train_op(loss, opt,
+          global_step=global_step, colocate_gradients_with_ops=True)
 
       session_config = tf.ConfigProto(allow_soft_placement=True)
 
@@ -125,7 +126,7 @@ def main(unused_argv=None):
           master=FLAGS.master,
           number_of_steps=config.num_iters,
           global_step=global_step,
-          log_every_n_steps=250,
+          log_every_n_steps=FLAGS.log_period,
           local_init_op=local_init_op,
           save_interval_secs=300,
           sync_optimizer=opt,
