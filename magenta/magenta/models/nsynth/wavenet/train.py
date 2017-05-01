@@ -48,6 +48,8 @@ tf.app.flags.DEFINE_string("train_path", "", "The path to the train tfrecord.")
 tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
+tf.app.flags.DEFINE_integer("num_iters", 1000,
+                            "Number of iterations.")
 
 
 def main(unused_argv=None):
@@ -57,7 +59,7 @@ def main(unused_argv=None):
     raise RuntimeError("No config name specified.")
 
   config = utils.get_module("wavenet." + FLAGS.config).Config(
-      FLAGS.train_path)
+      FLAGS.train_path, FLAGS.num_iters)
 
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)
