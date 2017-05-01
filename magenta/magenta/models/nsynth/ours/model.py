@@ -145,6 +145,7 @@ class Config(object):
 
       logits = masked.deconv1d(
           de,
+          causal=False,
           num_filters=256,
           filter_length=ae_filter_length,
           name='logits')
