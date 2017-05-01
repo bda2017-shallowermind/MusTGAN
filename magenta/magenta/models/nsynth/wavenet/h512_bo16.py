@@ -89,15 +89,11 @@ class Config(object):
     ae_filter_length = 3
     ae_width = 128
 
-    shape_out = open("./shape", 'w')
     # Encode the source with 8-bit Mu-Law.
     x = inputs['wav']
     x_quantized = utils.mu_law(x)
-    shape_out.write("x_quantized shape: " + str(x_quantized.shape.as_list()) + "\n")
     x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
     x_scaled = tf.expand_dims(x_scaled, 2)
-    shape_out.write("x_scaled shape: " + str(x_scaled.shape.as_list()) + "\n")
-
 
     ###
     # The Non-Causal Temporal Encoder.
@@ -108,10 +104,8 @@ class Config(object):
         num_filters=ae_width,
         filter_length=ae_filter_length,
         name='ae_startconv')
-    shape_out.write("en shape: " + str(en.shape.as_list()) + "\n")
 
     for num_layer in xrange(ae_num_layers):
-      shape_out.write("encoder layer-%d\n" % num_layer)
       dilation = 2**(num_layer % ae_num_stages)
       d = tf.nn.relu(en)
       d = masked.conv1d(
@@ -121,44 +115,34 @@ class Config(object):
           filter_length=ae_filter_length,
           dilation=dilation,
           name='ae_dilatedconv_%d' % (num_layer + 1))
-      shape_out.write("d shape: " + str(d.shape.as_list()) + "\n")
       d = tf.nn.relu(d)
       en += masked.conv1d(
           d,
           num_filters=ae_width,
           filter_length=1,
           name='ae_res_%d' % (num_layer + 1))
-      shape_out.write("en shape: " + str(en.shape.as_list()) + "\n")
 
-    # [4, 5120, 16]
     en = masked.conv1d(
         en,
         num_filters=self.ae_bottleneck_width,
         filter_length=1,
         name='ae_bottleneck')
-    shape_out.write("en shape: " + str(en.shape.as_list()) + "\n")
-    # [4, 10, 16]
     en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
-    shape_out.write("en shape: " + str(en.shape.as_list()) + "\n")
     encoding = en
 
     ###
     # The WaveNet Decoder.
     ###
     l = masked.shift_right(x_scaled)
-    shape_out.write("l shape: " + str(l.shape.as_list()) + "\n")
     l = masked.conv1d(
         l, num_filters=width, filter_length=filter_length, name='startconv')
-    shape_out.write("l shape: " + str(l.shape.as_list()) + "\n")
 
     # Set up skip connections.
     s = masked.conv1d(
         l, num_filters=skip_width, filter_length=1, name='skip_start')
-    shape_out.write("s shape: " + str(s.shape.as_list()) + "\n")
 
     # Residual blocks with skip connections.
     for i in xrange(num_layers):
-      shape_out.write("decoder layer-%d\n" % i)
       dilation = 2**(i % num_stages)
       d = masked.conv1d(
           l,
@@ -166,7 +150,6 @@ class Config(object):
           filter_length=filter_length,
           dilation=dilation,
           name='dilatedconv_%d' % (i + 1))
-      shape_out.write("d shape: " + str(d.shape.as_list()) + "\n")
       d = self._condition(d,
                           masked.conv1d(
                               en,
@@ -182,14 +165,11 @@ class Config(object):
 
       l += masked.conv1d(
           d, num_filters=width, filter_length=1, name='res_%d' % (i + 1))
-      shape_out.write("l shape: " + str(l.shape.as_list()) + "\n")
       s += masked.conv1d(
           d, num_filters=skip_width, filter_length=1, name='skip_%d' % (i + 1))
-      shape_out.write("s shape: " + str(s.shape.as_list()) + "\n")
 
     s = tf.nn.relu(s)
     s = masked.conv1d(s, num_filters=skip_width, filter_length=1, name='out1')
-    shape_out.write("s shape: " + str(s.shape.as_list()) + "\n")
     s = self._condition(s,
                         masked.conv1d(
                             en,
@@ -202,7 +182,6 @@ class Config(object):
     # Compute the logits and get the loss.
     ###
     logits = masked.conv1d(s, num_filters=256, filter_length=1, name='logits')
-    shape_out.write("logits shape: " + str(logits.shape.as_list()) + "\n")
     logits = tf.reshape(logits, [-1, 256])
     probs = tf.nn.softmax(logits, name='softmax')
     x_indices = tf.cast(tf.reshape(x_quantized, [-1]), tf.int32) + 128
@@ -211,7 +190,6 @@ class Config(object):
             logits=logits, labels=x_indices, name='nll'),
         0,
         name='loss')
-    shape_out.close()
 
     return {
         'predictions': probs,
