@@ -43,6 +43,12 @@ tf.app.flags.DEFINE_integer("num_iters", 1000,
                             "Number of iterations.")
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
+tf.app.flags.DEFINE_string("expdir", "",
+                           "The log directory for this experiment. Required if "
+                           "`checkpoint_path` is not given.")
+tf.app.flags.DEFINE_string("checkpoint_path", "",
+                           "A path to the checkpoint. If not given, the latest "
+                           "checkpoint in `expdir` will be used.")
 
 
 def main(unused_argv=None):
@@ -53,6 +59,28 @@ def main(unused_argv=None):
 
   config = utils.get_module("ours." + FLAGS.config).Config(
       FLAGS.train_path, FLAGS.num_iters)
+  
+  if FLAGS.checkpoint_path:
+    checkpoint_path = FLAGS.checkpoint_path
+  else:
+    expdir = FLAGS.expdir
+    tf.logging.info("Will load latest checkpoint from %s.", expdir)
+    while not tf.gfile.Exists(expdir):
+      tf.logging.fatal("\tExperiment save dir '%s' does not exist!", expdir)
+      sys.exit(1)
+
+    try:
+      checkpoint_path = tf.train.latest_checkpoint(expdir)
+    except tf.errors.NotFoundError:
+      tf.logging.fatal("There was a problem determining the latest checkpoint.")
+      sys.exit(1)
+
+  if not tf.train.checkpoint_exists(checkpoint_path):
+    tf.logging.fatal("Invalid checkpoint path: %s", checkpoint_path)
+    sys.exit(1)
+
+  tf.logging.info("Will restore from checkpoint: %s", checkpoint_path)
+
 
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)
@@ -111,6 +139,25 @@ def main(unused_argv=None):
 
       is_chief = (FLAGS.task == 0)
       local_init_op = opt.chief_init_op if is_chief else opt.local_step_init_op
+      
+      encoder_variables = ['ae_startconv', 'ae_bottleneck']
+      for i in range(1,31):
+        encoder_variables.append('ae_dilatedconv_'+str(i))
+        encoder_variables.append('ae_res_'+str(i))
+
+      variables_to_restore = slim.get_variables_to_restore(include=encoder_variables)
+      
+      '''
+      for var in variables_to_restore:
+        tf.summary.histogram(var.name, var)
+      '''
+
+      #init_fn = tf.contrib.framework.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore)
+      init_assign_op, init_feed_dict = slim.assign_from_checkpoint(checkpoint_path, variables_to_restore)
+
+      # Create an initial assignment function.
+      def InitAssignFn(sess):
+        sess.run(init_assign_op, init_feed_dict)
 
       slim.learning.train(
           train_op=train_op,
@@ -121,10 +168,12 @@ def main(unused_argv=None):
           global_step=global_step,
           log_every_n_steps=FLAGS.log_period,
           local_init_op=local_init_op,
+          init_fn=InitAssignFn,
           save_interval_secs=300,
           sync_optimizer=opt,
           session_config=session_config,)
 
-
+      #merged = tf.merge_all_summaries()
+      #writer = tf.train.SummaryWriter("
 if __name__ == "__main__":
   tf.app.run()
