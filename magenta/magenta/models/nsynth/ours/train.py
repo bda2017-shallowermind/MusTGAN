@@ -53,16 +53,14 @@ def main(unused_argv=None):
   if FLAGS.config is None:
     raise RuntimeError("No config name specified.")
 
-  config = utils.get_module("ours." + FLAGS.config).Config(
-      FLAGS.train_path, FLAGS.num_iters)
-
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)
 
   with tf.Graph().as_default():
     total_batch_size = FLAGS.total_batch_size
-    assert total_batch_size % FLAGS.worker_replicas == 0
-    worker_batch_size = total_batch_size / FLAGS.worker_replicas
+    assert total_batch_size % FLAGS.gpu == 0
+    worker_batch_size = total_batch_size / FLAGS.gpu
+    config = utils.get_module("ours." + FLAGS.config).Config(worker_batch_size)
 
     # Run the Reader on the CPU
     cpu_device = "/job:localhost/replica:0/task:0/cpu:0"
@@ -71,8 +69,6 @@ def main(unused_argv=None):
 
     with tf.variable_scope('ours_model_var_scope') as var_scope:
       with tf.device(cpu_device):
-        inputs_dict = config.get_batch(worker_batch_size)
-
         global_step = tf.get_variable(
             "global_step", [],
             tf.int32,
@@ -88,6 +84,7 @@ def main(unused_argv=None):
 
         losses = []
         for i in range(FLAGS.gpu):
+          inputs_dict = config.get_batch(FLAGS.train_path + '/' + str(i))
           with tf.device('/gpu:%d' % i):
             with tf.name_scope('GPU_NAME_SCOPE_%d' % i):
               # build the model graph
@@ -126,7 +123,7 @@ def main(unused_argv=None):
         logdir=logdir,
         is_chief=is_chief,
         master=FLAGS.master,
-        number_of_steps=config.num_iters,
+        number_of_steps=FLAGS.num_iters,
         global_step=global_step,
         log_every_n_steps=FLAGS.log_period,
         local_init_op=local_init_op,

@@ -24,8 +24,7 @@ from magenta.models.nsynth.ours import masked
 class Config(object):
   """Configuration object that helps manage the graph."""
 
-  def __init__(self, train_path=None, num_iters=200000):
-    self.num_iters = num_iters
+  def __init__(self, batch_size):
     self.learning_rate_schedule = {
         0: 2e-4,
         90000: 4e-4 / 3,
@@ -42,12 +41,12 @@ class Config(object):
     self.ae_filter_length = 3
     self.ae_width = 128
     self.ae_bottleneck_width = 16
-    self.train_path = train_path
+    self.batch_size = batch_size
 
-  def get_batch(self, batch_size):
-    assert self.train_path is not None
-    data_train = reader.NSynthDataset(self.train_path, is_training=True)
-    return data_train.get_wavenet_batch(batch_size, length=6144)
+  def get_batch(self, train_path):
+    assert train_path is not None
+    data_train = reader.NSynthDataset(train_path, is_training=True)
+    return data_train.get_wavenet_batch(self.batch_size, length=6144)
 
   def encode(self, inputs, reuse=False):
     tf.logging.info("encode")
