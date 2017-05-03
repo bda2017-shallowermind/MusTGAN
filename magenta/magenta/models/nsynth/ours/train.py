@@ -39,6 +39,8 @@ tf.app.flags.DEFINE_string("train_path", "", "The path to the train tfrecord.")
 tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
+tf.app.flags.DEFINE_integer("num_iters", 1000,
+                            "Number of iterations.")
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
 
@@ -50,7 +52,7 @@ def main(unused_argv=None):
     raise RuntimeError("No config name specified.")
 
   config = utils.get_module("ours." + FLAGS.config).Config(
-      FLAGS.train_path)
+      FLAGS.train_path, FLAGS.num_iters)
 
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)

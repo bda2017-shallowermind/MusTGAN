@@ -24,8 +24,8 @@ from magenta.models.nsynth.ours import masked
 class Config(object):
   """Configuration object that helps manage the graph."""
 
-  def __init__(self, train_path=None):
-    self.num_iters = 200000
+  def __init__(self, train_path=None, num_iters=200000):
+    self.num_iters = num_iters
     self.learning_rate_schedule = {
         0: 2e-4,
         90000: 4e-4 / 3,
