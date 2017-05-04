@@ -140,6 +140,7 @@ def main(unused_argv=None):
       is_chief = (FLAGS.task == 0)
       local_init_op = opt.chief_init_op if is_chief else opt.local_step_init_op
       
+      # specify which weights are going to be restored
       encoder_variables = ['ae_startconv', 'ae_bottleneck']
       for i in range(1,31):
         encoder_variables.append('ae_dilatedconv_'+str(i))
@@ -147,11 +148,6 @@ def main(unused_argv=None):
 
       variables_to_restore = slim.get_variables_to_restore(include=encoder_variables)
       
-      '''
-      for var in variables_to_restore:
-        tf.summary.histogram(var.name, var)
-      '''
-
       #init_fn = tf.contrib.framework.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore)
       init_assign_op, init_feed_dict = slim.assign_from_checkpoint(checkpoint_path, variables_to_restore)
 
