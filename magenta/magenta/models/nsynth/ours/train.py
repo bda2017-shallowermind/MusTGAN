@@ -14,6 +14,7 @@
 
 # internal imports
 import tensorflow as tf
+import glob
 
 from magenta.models.nsynth import utils
 
@@ -55,6 +56,8 @@ def main(unused_argv=None):
 
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)
+  train_files = glob.glob(FLAGS.train_path + "/*")
+  assert len(train_files) == FLAGS.gpu
 
   with tf.Graph().as_default():
     total_batch_size = FLAGS.total_batch_size
@@ -84,7 +87,7 @@ def main(unused_argv=None):
 
         losses = []
         for i in range(FLAGS.gpu):
-          inputs_dict = config.get_batch(FLAGS.train_path + '/' + str(i))
+          inputs_dict = config.get_batch(train_files[i])
           with tf.device('/gpu:%d' % i):
             with tf.name_scope('GPU_NAME_SCOPE_%d' % i):
               # build the model graph
@@ -127,7 +130,7 @@ def main(unused_argv=None):
         global_step=global_step,
         log_every_n_steps=FLAGS.log_period,
         local_init_op=local_init_op,
-        save_interval_secs=300,
+        save_interval_secs=1200,
         sync_optimizer=opt,
         session_config=session_config,)
 

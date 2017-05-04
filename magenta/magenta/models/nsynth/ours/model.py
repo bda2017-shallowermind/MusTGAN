@@ -26,13 +26,14 @@ class Config(object):
 
   def __init__(self, batch_size):
     self.learning_rate_schedule = {
-        0: 2e-4,
-        90000: 4e-4 / 3,
-        120000: 6e-5,
-        150000: 4e-5,
-        180000: 2e-5,
-        210000: 6e-6,
-        240000: 2e-6,
+        0: 3e-4,
+        2500: 1e-4,
+        5000: 6e-5,
+        10000: 4e-5,
+        20000: 2e-5,
+        40000: 1e-5,
+        60000: 6e-6,
+        80000: 2e-6,
     }
     self.num_stages = 10
     self.filter_length = 3
