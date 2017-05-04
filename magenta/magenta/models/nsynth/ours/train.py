@@ -14,6 +14,7 @@
 
 # internal imports
 import tensorflow as tf
+import glob
 
 from magenta.models.nsynth import utils
 
@@ -43,6 +44,8 @@ tf.app.flags.DEFINE_integer("num_iters", 1000,
                             "Number of iterations.")
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
+tf.app.flags.DEFINE_integer("ckpt_period", 1200,
+                            "Checkpoint current variables after every ckpt_period sec.")
 tf.app.flags.DEFINE_integer("gpu", 2,
                             "Number of gpus to use.")
 
@@ -55,6 +58,8 @@ def main(unused_argv=None):
 
   logdir = FLAGS.logdir
   tf.logging.info("Saving to %s" % logdir)
+  train_files = glob.glob(FLAGS.train_path + "/*")
+  assert len(train_files) == FLAGS.gpu
 
   with tf.Graph().as_default():
     total_batch_size = FLAGS.total_batch_size
@@ -84,7 +89,7 @@ def main(unused_argv=None):
 
         losses = []
         for i in range(FLAGS.gpu):
-          inputs_dict = config.get_batch(FLAGS.train_path + '/' + str(i))
+          inputs_dict = config.get_batch(train_files[i])
           with tf.device('/gpu:%d' % i):
             with tf.name_scope('GPU_NAME_SCOPE_%d' % i):
               # build the model graph
@@ -127,7 +132,7 @@ def main(unused_argv=None):
         global_step=global_step,
         log_every_n_steps=FLAGS.log_period,
         local_init_op=local_init_op,
-        save_interval_secs=300,
+        save_interval_secs=FLAGS.ckpt_period,
         sync_optimizer=opt,
         session_config=session_config,)
 
