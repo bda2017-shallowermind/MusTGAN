@@ -44,6 +44,8 @@ tf.app.flags.DEFINE_integer("num_iters", 1000,
                             "Number of iterations.")
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
+tf.app.flags.DEFINE_integer("ckpt_period", 1200,
+                            "Checkpoint current variables after every ckpt_period sec.")
 tf.app.flags.DEFINE_integer("gpu", 2,
                             "Number of gpus to use.")
 
@@ -130,7 +132,7 @@ def main(unused_argv=None):
         global_step=global_step,
         log_every_n_steps=FLAGS.log_period,
         local_init_op=local_init_op,
-        save_interval_secs=1200,
+        save_interval_secs=FLAGS.ckpt_period,
         sync_optimizer=opt,
         session_config=session_config,)
 
