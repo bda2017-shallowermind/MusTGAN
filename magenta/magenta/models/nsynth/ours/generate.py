@@ -18,6 +18,7 @@ import sys
 # internal imports
 import numpy as np
 import tensorflow as tf
+import ntpath
 import librosa
 from magenta.models.nsynth import utils
 
@@ -33,7 +34,7 @@ tf.app.flags.DEFINE_string("wavdir", "",
                            "The directory of WAVs to yield embeddings from.")
 tf.app.flags.DEFINE_string("config", "model", "Model configuration name")
 tf.app.flags.DEFINE_integer("sample_length", 64000, "Sample length.")
-tf.app.flags.DEFINE_integer("batch_size", 16, "Sample length.")
+tf.app.flags.DEFINE_integer("batch_size", 1, "Sample length.")
 
 tf.app.flags.DEFINE_string("wav_savedir", "", "Where to save the generated wav files.")
 tf.app.flags.DEFINE_integer("sample_rate", 16000, "Sample length.")
@@ -51,22 +52,24 @@ def mu_law_decode(output, quantization_channels):
         magnitude = (1 / mu) * ((1 + mu)**abs(signal) - 1)
         return tf.sign(signal) * magnitude
 
-def write_wav(waveform, sample_rate, pathname):
+def write_wav(waveform, sample_rate, pathname, wavfile_name):
+    filename = "%s_decode.wav" % wavfile_name.strip(".wav")
+    pathname += "/"+filename
     y = np.array(waveform)
-    librosa.output.write_wav(filename, y, sample_rate)
+    librosa.output.write_wav(pathname, y, sample_rate)
     print('Updated wav file at {}'.format(pathname))
 
-def generate(prediction):
+def generate(prediction, wavfile_name):
   decoded_prediction = mu_law_decode(prediction, 256)
-  write_wav(decoded_prediction, sample_rate, FLAGS.wav_savedir)
+  write_wav(decoded_prediction, sample_rate, FLAGS.wav_savedir, wavfile_name)
 
 def main(unused_argv=None):
   tf.logging.set_verbosity(FLAGS.log)
   
   if FLAGS.config is None:
     raise RuntimeError("No config name specified.")
-
-  config = utils.get_module("ours." + FLAGS.config).Config()
+  
+  config = utils.get_module("ours." + FLAGS.config).Config(FLAGS.batch_size)
 
   if FLAGS.checkpoint_path:
     checkpoint_path = FLAGS.checkpoint_path
@@ -95,6 +98,70 @@ def main(unused_argv=None):
   ######################
   # restore the model  #
   ######################
+  tf.logging.info("Building graph")
+  with tf.Graph().as_default(), tf.device("/gpu:0"):
+    with tf.variable_scope('ours_model_var_scope') as var_scope:
+      sample_length = FLAGS.sample_length
+      batch_size = FLAGS.batch_size
+      wav_placeholder = tf.placeholder(
+          tf.float32, shape=[batch_size, sample_length])
+      wav_names = tf.placeholder(tf.string, shape=[batch_size])
+      encode_op = config.encode(wav_placeholder)["encoding"]
+      decode_op = config.decode(encode_op)["predictions"]
+      generate_wav = generate(decode_op, wav_names)
+
+    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
+    variables_to_restore = ema.variables_to_restore()
+
+    # Create a saver, which is used to restore the parameters from checkpoints
+    saver = tf.train.Saver(variables_to_restore)
+
+    session_config = tf.ConfigProto(allow_soft_placement=True)
+    # Set the opt_level to prevent py_funcs from being executed multiple times.
+    session_config.graph_options.optimizer_options.opt_level = 2
+    sess = tf.Session("", config=session_config)
+
+    tf.logging.info("\tRestoring from checkpoint.")
+    saver.restore(sess, checkpoint_path)
+    
+    def is_wav(f):
+      return f.lower().endswith(".wav")
+
+    wavfiles = sorted([
+        os.path.join(wavdir, fname) for fname in tf.gfile.ListDirectory(wavdir)
+        if is_wav(fname)
+    ])
+    
+    def get_fnames(files):
+      fnames_list = []
+      for f in files:
+        fnames_list.append(ntpath.basename(f))
+      return fname_list
+
+    for start_file in xrange(0, len(wavfiles), batch_size):
+      batch_number = (start_file / batch_size) + 1
+      tf.logging.info("On file number %s (batch %d).", start_file, batch_number)
+      end_file = start_file + batch_size
+      files = wavfiles[start_file:end_file]
+      wavfile_names = get_fnames(files)
+
+      # Ensure that files has batch_size elements.
+      batch_filler = batch_size - len(files)
+      files.extend(batch_filler * [files[-1]])
+
+      wavdata = np.array([utils.load_wav(f)[:sample_length] for f in files])
+
+      try:
+        sess.run(
+            generate_wav, feed_dict={wav_placeholder: wavdata, wav_names: wavfile_names})
+        
+      except Exception, e:
+        tf.logging.info("Unexpected error happened: %s.", e)
+        raise
+
+
+
+'''
   tf.logging.info("Building graph")
   with tf.Graph().as_default():
     total_batch_size = FLAGS.total_batch_size
@@ -133,6 +200,7 @@ def main(unused_argv=None):
           tf.gfile.MakeDirs(wav_savedir)
  
         sess.run(generate_wav)
+'''
 
 if __name__ == "__main__":
   tf.app.run()
