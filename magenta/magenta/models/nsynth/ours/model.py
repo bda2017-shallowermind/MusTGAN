@@ -24,16 +24,16 @@ from magenta.models.nsynth.ours import masked
 class Config(object):
   """Configuration object that helps manage the graph."""
 
-  def __init__(self, train_path=None, num_iters=200000):
-    self.num_iters = num_iters
+  def __init__(self, batch_size):
     self.learning_rate_schedule = {
-        0: 2e-4,
-        90000: 4e-4 / 3,
-        120000: 6e-5,
-        150000: 4e-5,
-        180000: 2e-5,
-        210000: 6e-6,
-        240000: 2e-6,
+        0: 3e-4,
+        2500: 1e-4,
+        5000: 6e-5,
+        10000: 4e-5,
+        20000: 2e-5,
+        40000: 1e-5,
+        60000: 6e-6,
+        80000: 2e-6,
     }
     self.num_stages = 10
     self.filter_length = 3
@@ -42,15 +42,14 @@ class Config(object):
     self.ae_filter_length = 3
     self.ae_width = 128
     self.ae_bottleneck_width = 16
-    self.train_path = train_path
+    self.batch_size = batch_size
 
-  def get_batch(self, batch_size):
-    assert self.train_path is not None
-    data_train = reader.NSynthDataset(self.train_path, is_training=True)
-    return data_train.get_wavenet_batch(batch_size, length=6144)
+  def get_batch(self, train_path):
+    assert train_path is not None
+    data_train = reader.NSynthDataset(train_path, is_training=True)
+    return data_train.get_wavenet_batch(self.batch_size, length=6144)
 
   def encode(self, inputs, reuse=False):
-    tf.logging.info("encode")
     ae_num_stages = self.ae_num_stages
     ae_num_layers = self.ae_num_layers
     ae_filter_length = self.ae_filter_length
@@ -61,10 +60,8 @@ class Config(object):
     x = inputs
     tf.logging.info("x shape: %s", str(x.shape.as_list()))
     x_quantized = utils.mu_law(x)
-    tf.logging.info("x_quantized shape: %s", str(x_quantized.shape.as_list()))
     x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
     x_scaled = tf.expand_dims(x_scaled, 2)
-    tf.logging.info("x_scaled shape: %s", str(x_scaled.shape.as_list()))
 
     en = masked.conv1d(
         x_scaled,
@@ -72,7 +69,6 @@ class Config(object):
         num_filters=ae_width,
         filter_length=ae_filter_length,
         name='ae_startconv')
-    tf.logging.info("en shape: %s", str(en.shape.as_list()))
 
     for num_layer in xrange(ae_num_layers):
       dilation = 2**(num_layer % ae_num_stages)
@@ -84,7 +80,6 @@ class Config(object):
           filter_length=ae_filter_length,
           dilation=dilation,
           name='ae_dilatedconv_%d' % (num_layer + 1))
-      tf.logging.info("d-%d shape: %s", num_layer, str(d.shape.as_list()))
       d = tf.nn.relu(d)
       en += masked.conv1d(
           d,
@@ -97,7 +92,6 @@ class Config(object):
         num_filters=self.ae_bottleneck_width,
         filter_length=1,
         name='ae_bottleneck')
-    tf.logging.info("en shape: %s", str(en.shape.as_list()))
 
     # pooling is optional
     # en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
@@ -108,7 +102,6 @@ class Config(object):
     }
 
   def decode(self, encoding, reuse=False):
-    tf.logging.info("decode")
     ae_num_stages = self.ae_num_stages
     ae_num_layers = self.ae_num_layers
     ae_filter_length = self.ae_filter_length
@@ -122,7 +115,6 @@ class Config(object):
           num_filters=self.ae_width,
           filter_length=1,
           name='ae_bottleneck')
-      tf.logging.info("de shape: %s", str(de.shape.as_list()))
 
       # Residual blocks with skip connections.
       for i in xrange(ae_num_layers):
@@ -135,7 +127,6 @@ class Config(object):
             filter_length=ae_filter_length,
             dilation=dilation,
             name='ae_dilateddeconv_%d' % (i + 1))
-        tf.logging.info("d-%d shape: %s", i, str(d.shape.as_list()))
         d = tf.nn.relu(d)
         de += masked.conv1d(
             d,
@@ -149,9 +140,7 @@ class Config(object):
           num_filters=256,
           filter_length=ae_filter_length,
           name='logits')
-      tf.logging.info("logits shape: %s", str(logits.shape.as_list()))
       logits = tf.reshape(logits, [-1, 256])
-      tf.logging.info("logits shape: %s", str(logits.shape.as_list()))
       probs = tf.nn.softmax(logits, name='softmax')
 
     return {
@@ -161,14 +150,11 @@ class Config(object):
 
   def loss(self, x_quantized, logits):
     x_indices = tf.cast(tf.reshape(x_quantized, [-1]), tf.int32) + 128
-    tf.logging.info("x_indices shape: %s", str(x_indices.shape.as_list()))
-    tf.logging.info("logits shape: %s", str(logits.shape.as_list()))
     loss = tf.reduce_mean(
         tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=logits, labels=x_indices, name='nll'),
         0,
         name='loss')
-    tf.logging.info("loss shape: %s", str(loss.shape.as_list()))
 
     return {
         'loss': loss,
