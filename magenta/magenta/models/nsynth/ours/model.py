@@ -43,7 +43,7 @@ class Config(object):
     self.ae_width = 128
     self.ae_bottleneck_width = 16
     self.batch_size = batch_size
-    self.tv_const = 1 
+    self.tv_const = 0.00001
 
   def get_batch(self, train_path):
     assert train_path is not None
@@ -155,7 +155,7 @@ class Config(object):
         tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=logits, labels=x_indices, name='nll'),
         0,
-        name='loss') + self.tv_const*tf.reduce_sum(tf.image.total_variation(tf.expand_dims(logits, 0)), name='loss')
+        name='loss') + self.tv_const*tf.reduce_mean(tf.image.total_variation(tf.expand_dims(logits, 0)), name='loss')
 
     return {
         'loss': loss,
