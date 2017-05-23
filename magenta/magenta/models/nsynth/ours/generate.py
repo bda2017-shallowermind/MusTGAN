@@ -42,16 +42,6 @@ tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
 
-def mu_law_decode(output, quantization_channels):
-    '''Recovers waveform from quantized values.'''
-    with tf.name_scope('decode'):
-        mu = tf.to_float(quantization_channels - 1)
-        # Map values back to [-1, 1].
-        signal = 2 * (tf.to_float(output) / mu) - 1
-        # Perform inverse of mu-law transformation.
-        magnitude = (1 / mu) * ((1 + mu)**abs(signal) - 1)
-        return tf.sign(signal) * magnitude
-
 def write_wav(waveform, sample_rate, pathname, wavfile_name):
     filename = "%s_decode.wav" % wavfile_name.strip(".wav")
     pathname += "/"+filename
@@ -63,7 +53,8 @@ def sampled(prediction):
   return tf.multinomial(prediction, 1)
 
 def generate(sample):
-  return mu_law_decode(sample, 256)
+  #return mu_law_decode(sample, 256)
+  return utils.inv_mu_law(sample - 128)
 
 def main(unused_argv=None):
   tf.logging.set_verbosity(FLAGS.log)
@@ -109,7 +100,7 @@ def main(unused_argv=None):
           tf.float32, shape=[batch_size, sample_length])
       wav_names = tf.placeholder(tf.string, shape=[batch_size])
       encode_op = config.encode(wav_placeholder)["encoding"]
-      decode_op = config.decode(encode_op)["predictions"]
+      decode_op = config.decode(encode_op)["logits"] # predictions"]
       sample = sampled(decode_op)
       generate_wav = generate(sample)
 
