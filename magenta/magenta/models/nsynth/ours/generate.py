@@ -42,6 +42,7 @@ tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
 
+'''
 def mu_law_decode(output, quantization_channels):
     '''Recovers waveform from quantized values.'''
     with tf.name_scope('decode'):
@@ -51,6 +52,7 @@ def mu_law_decode(output, quantization_channels):
         # Perform inverse of mu-law transformation.
         magnitude = (1 / mu) * ((1 + mu)**abs(signal) - 1)
         return tf.sign(signal) * magnitude
+'''
 
 def write_wav(waveform, sample_rate, pathname, wavfile_name):
     filename = "%s_decode.wav" % wavfile_name.strip(".wav")
@@ -60,7 +62,7 @@ def write_wav(waveform, sample_rate, pathname, wavfile_name):
     print('Updated wav file at {}'.format(pathname))
 
 def generate(prediction, wavfile_name):
-  decoded_prediction = mu_law_decode(prediction, 256)
+  decoded_prediction = utils.inv_mu_law(prediction)
   write_wav(decoded_prediction, sample_rate, FLAGS.wav_savedir, wavfile_name)
 
 def main(unused_argv=None):
