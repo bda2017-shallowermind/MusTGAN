@@ -44,9 +44,9 @@ tf.app.flags.DEFINE_string("log", "INFO",
 
 '''
 def mu_law_decode(output, quantization_channels):
-    '''Recovers waveform from quantized values.'''
+    #Recovers waveform from quantized values.
     with tf.name_scope('decode'):
-        mu = quantization_channels - 1
+        mu = tf.to_float(quantization_channels - 1)
         # Map values back to [-1, 1].
         signal = 2 * (tf.to_float(output) / mu) - 1
         # Perform inverse of mu-law transformation.
@@ -64,6 +64,9 @@ def write_wav(waveform, sample_rate, pathname, wavfile_name):
 def generate(prediction, wavfile_name):
   decoded_prediction = utils.inv_mu_law(prediction)
   write_wav(decoded_prediction, sample_rate, FLAGS.wav_savedir, wavfile_name)
+
+def sampled(prediction):
+  return tf.multinomial(prediction, 1)
 
 def main(unused_argv=None):
   tf.logging.set_verbosity(FLAGS.log)
@@ -110,7 +113,8 @@ def main(unused_argv=None):
       wav_names = tf.placeholder(tf.string, shape=[batch_size])
       encode_op = config.encode(wav_placeholder)["encoding"]
       decode_op = config.decode(encode_op)["predictions"]
-      generate_wav = generate(decode_op, wav_names)
+      sample = sampled(decode_op)
+      generate_wav = generate(sample)
 
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     variables_to_restore = ema.variables_to_restore()
@@ -138,7 +142,7 @@ def main(unused_argv=None):
       fnames_list = []
       for f in files:
         fnames_list.append(ntpath.basename(f))
-      return fname_list
+      return fnames_list
 
     for start_file in xrange(0, len(wavfiles), batch_size):
       batch_number = (start_file / batch_size) + 1
@@ -154,12 +158,15 @@ def main(unused_argv=None):
       wavdata = np.array([utils.load_wav(f)[:sample_length] for f in files])
 
       try:
-        sess.run(
-            generate_wav, feed_dict={wav_placeholder: wavdata, wav_names: wavfile_names})
-        
+        sampled_res, res = sess.run(
+            [sample, generate_wav],
+            feed_dict={wav_placeholder: wavdata, wav_names: wavfile_names})
+
       except Exception, e:
         tf.logging.info("Unexpected error happened: %s.", e)
         raise
+
+      write_wav(res, FLAGS.sample_rate, FLAGS.wav_savedir, wavfile_names[start_file])
 
 
 
