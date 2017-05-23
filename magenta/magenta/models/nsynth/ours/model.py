@@ -43,7 +43,7 @@ class Config(object):
     self.ae_width = 128
     self.ae_bottleneck_width = 16
     self.batch_size = batch_size
-    self.tv_const = 0.00001
+    self.tv_const = 1e-6
 
   def get_batch(self, train_path):
     assert train_path is not None
