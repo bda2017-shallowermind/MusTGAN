@@ -102,7 +102,8 @@ def main(unused_argv=None):
       encode_op = config.encode(wav_placeholder)["encoding"]
       decode_op = config.decode(encode_op)["logits"] # predictions"]
       sample = sampled(decode_op)
-      generate_wav = generate(sample)
+      reshaped_sample = tf.reshape(sample, [batch_size, sample_length])
+      generate_wav = generate(reshaped_sample)
 
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     variables_to_restore = ema.variables_to_restore()
