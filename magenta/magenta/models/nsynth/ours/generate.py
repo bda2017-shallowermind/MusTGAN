@@ -61,12 +61,12 @@ def write_wav(waveform, sample_rate, pathname, wavfile_name):
     librosa.output.write_wav(pathname, y, sample_rate)
     print('Updated wav file at {}'.format(pathname))
 
-def generate(prediction, wavfile_name):
-  decoded_prediction = utils.inv_mu_law(prediction)
+def generate(logits, wavfile_name):
+  decoded_prediction = utils.inv_mu_law(logits)
   write_wav(decoded_prediction, sample_rate, FLAGS.wav_savedir, wavfile_name)
 
-def sampled(prediction):
-  return tf.multinomial(prediction, 1)
+def sampled(logits):
+  return tf.multinomial(logits, 1)
 
 def main(unused_argv=None):
   tf.logging.set_verbosity(FLAGS.log)
@@ -112,7 +112,7 @@ def main(unused_argv=None):
           tf.float32, shape=[batch_size, sample_length])
       wav_names = tf.placeholder(tf.string, shape=[batch_size])
       encode_op = config.encode(wav_placeholder)["encoding"]
-      decode_op = config.decode(encode_op)["predictions"]
+      decode_op = config.decode(encode_op)["logits"]
       sample = sampled(decode_op)
       generate_wav = generate(sample)
 
