@@ -42,18 +42,6 @@ tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
 
-'''
-def mu_law_decode(output, quantization_channels):
-    #Recovers waveform from quantized values.
-    with tf.name_scope('decode'):
-        mu = tf.to_float(quantization_channels - 1)
-        # Map values back to [-1, 1].
-        signal = 2 * (tf.to_float(output) / mu) - 1
-        # Perform inverse of mu-law transformation.
-        magnitude = (1 / mu) * ((1 + mu)**abs(signal) - 1)
-        return tf.sign(signal) * magnitude
-'''
-
 def write_wav(waveform, sample_rate, pathname, wavfile_name):
     filename = "%s_decode.wav" % wavfile_name.strip(".wav")
     pathname += "/"+filename
@@ -167,49 +155,6 @@ def main(unused_argv=None):
         raise
 
       write_wav(res, FLAGS.sample_rate, FLAGS.wav_savedir, wavfile_names[start_file])
-
-
-
-'''
-  tf.logging.info("Building graph")
-  with tf.Graph().as_default():
-    total_batch_size = FLAGS.total_batch_size
-    assert total_batch_size % FLAGS.worker_replicas == 0
-    worker_batch_size = total_batch_size / FLAGS.worker_replicas
-
-    # Run the Reader on the CPU
-    cpu_device = "/job:localhost/replica:0/task:0/cpu:0"
-    if FLAGS.ps_tasks:
-      cpu_device = "/job:worker/cpu:0"
-
-    with tf.device(cpu_device):
-      inputs_dict = config.get_batch(worker_batch_size)
-
-      # build the model graph
-      encode_dict = config.encode(inputs_dict["wav"])
-      decode_dict = config.decode(encode_dict["encoding"])
-      loss_dict = config.loss(encode_dict["x_quantized"], decode_dict["logits"])
-      loss = loss_dict["loss"]
-      
-      generate_wav = generate(decode_dict["predicitons"])
-      # decode_dict["predictions"] = tf.placeholder("float", [None, 256])
-
-      init = tf.global_variables_initializer()
-      session_config = tf.ConfigProto(allow_soft_placement=True) #?
-      saver = tf.train.Saver()
-      with tf.Session("", config=session_config) as sess:
-        sess.run(init) 
-        tf.logging.info("\tRestoring from checkpoint.")
-        saver.restore(sess, checkpoint_path)
-
-        wav_savedir = FLAGS.wav_savedir
-        tf.logging.info("Will save wav files to %s." % wav_savedir)
-        if not tf.gfile.Exists(wav_savedir):
-          tf.logging.info("Creating save directory...")
-          tf.gfile.MakeDirs(wav_savedir)
- 
-        sess.run(generate_wav)
-'''
 
 if __name__ == "__main__":
   tf.app.run()
