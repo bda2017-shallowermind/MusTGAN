@@ -102,7 +102,8 @@ def main(unused_argv=None):
       encode_op = config.encode(wav_placeholder)["encoding"]
       decode_op = config.decode(encode_op)["logits"] # predictions"]
       sample = sampled(decode_op)
-      generate_wav = generate(sample)
+      reshaped_sample = tf.reshape(sample, [batch_size, sample_length])
+      generate_wav = generate(reshaped_sample)
 
     ema = tf.train.ExponentialMovingAverage(decay=0.9999)
     variables_to_restore = ema.variables_to_restore()
@@ -134,7 +135,7 @@ def main(unused_argv=None):
 
     for start_file in xrange(0, len(wavfiles), batch_size):
       batch_number = (start_file / batch_size) + 1
-      tf.logging.info("On file number %s (batch %d).", start_file, batch_number)
+      tf.logging.info("On batch %d.", batch_number)
       end_file = start_file + batch_size
       files = wavfiles[start_file:end_file]
       wavfile_names = get_fnames(files)
@@ -146,58 +147,16 @@ def main(unused_argv=None):
       wavdata = np.array([utils.load_wav(f)[:sample_length] for f in files])
 
       try:
-        sampled_res, res = sess.run(
-            [sample, generate_wav],
+        res = sess.run(generate_wav,
             feed_dict={wav_placeholder: wavdata, wav_names: wavfile_names})
 
       except Exception, e:
         tf.logging.info("Unexpected error happened: %s.", e)
         raise
 
-      write_wav(res, FLAGS.sample_rate, FLAGS.wav_savedir, wavfile_names[start_file])
+      for decoded_wav, filename in zip(res, wavfile_names):
+        write_wav(decoded_wav, FLAGS.sample_rate, FLAGS.wav_savedir, filename)
 
-
-
-'''
-  tf.logging.info("Building graph")
-  with tf.Graph().as_default():
-    total_batch_size = FLAGS.total_batch_size
-    assert total_batch_size % FLAGS.worker_replicas == 0
-    worker_batch_size = total_batch_size / FLAGS.worker_replicas
-
-    # Run the Reader on the CPU
-    cpu_device = "/job:localhost/replica:0/task:0/cpu:0"
-    if FLAGS.ps_tasks:
-      cpu_device = "/job:worker/cpu:0"
-
-    with tf.device(cpu_device):
-      inputs_dict = config.get_batch(worker_batch_size)
-
-      # build the model graph
-      encode_dict = config.encode(inputs_dict["wav"])
-      decode_dict = config.decode(encode_dict["encoding"])
-      loss_dict = config.loss(encode_dict["x_quantized"], decode_dict["logits"])
-      loss = loss_dict["loss"]
-      
-      generate_wav = generate(decode_dict["predicitons"])
-      # decode_dict["predictions"] = tf.placeholder("float", [None, 256])
-
-      init = tf.global_variables_initializer()
-      session_config = tf.ConfigProto(allow_soft_placement=True) #?
-      saver = tf.train.Saver()
-      with tf.Session("", config=session_config) as sess:
-        sess.run(init) 
-        tf.logging.info("\tRestoring from checkpoint.")
-        saver.restore(sess, checkpoint_path)
-
-        wav_savedir = FLAGS.wav_savedir
-        tf.logging.info("Will save wav files to %s." % wav_savedir)
-        if not tf.gfile.Exists(wav_savedir):
-          tf.logging.info("Creating save directory...")
-          tf.gfile.MakeDirs(wav_savedir)
- 
-        sess.run(generate_wav)
-'''
 
 if __name__ == "__main__":
   tf.app.run()
