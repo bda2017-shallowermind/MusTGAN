@@ -42,6 +42,7 @@ class Config(object):
     self.ae_filter_length = 3
     self.ae_width = 128
     self.ae_bottleneck_width = 16
+    self.ae_hop_length = 512
     self.batch_size = batch_size
     self.tv_const = 1e-6
 
@@ -92,6 +93,7 @@ class Config(object):
         en,
         num_filters=self.ae_bottleneck_width,
         filter_length=1,
+        stride=self.ae_hop_length,
         name='ae_bottleneck')
 
     # pooling is optional
@@ -115,6 +117,7 @@ class Config(object):
           de,
           num_filters=self.ae_width,
           filter_length=1,
+          stride=self.ae_hop_length,
           name='ae_bottleneck')
 
       # Residual blocks with skip connections.

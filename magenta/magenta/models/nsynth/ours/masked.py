@@ -92,6 +92,7 @@ def conv1d(x,
            filter_length,
            name,
            dilation=1,
+           stride=1,
            causal=True,
            kernel_initializer=tf.uniform_unit_scaling_initializer(1.0),
            biases_initializer=tf.constant_initializer(0.0)):
@@ -112,9 +113,10 @@ def conv1d(x,
   """
   batch_size, length, num_input_channels = x.get_shape().as_list()
   assert length % dilation == 0
+  assert length % stride == 0
 
   kernel_shape = [1, filter_length, num_input_channels, num_filters]
-  strides = [1, 1, 1, 1]
+  strides = [1, 1, stride, 1]
   biases_shape = [num_filters]
   padding = 'VALID' if causal else 'SAME'
 
@@ -136,7 +138,7 @@ def conv1d(x,
   y_shape = y.get_shape().as_list()
   y = tf.reshape(y, [y_shape[0], y_shape[2], num_filters])
   y = batch_to_time(y, dilation)
-  y.set_shape([batch_size, length, num_filters])
+  y.set_shape([batch_size, length / stride, num_filters])
   return y
 
 def deconv1d(x,
@@ -144,6 +146,7 @@ def deconv1d(x,
              filter_length,
              name,
              dilation=1,
+             stride=1,
              causal=True,
              kernel_initializer=tf.uniform_unit_scaling_initializer(1.0),
              biases_initializer=tf.constant_initializer(0.0)):
@@ -152,7 +155,7 @@ def deconv1d(x,
   assert length % dilation == 0
 
   kernel_shape = [1, filter_length, num_filters, num_input_channels]
-  strides = [1, 1, 1, 1]
+  strides = [1, 1, stride, 1]
   biases_shape = [num_filters]
   padding = 'VALID' if causal else 'SAME'
 
@@ -166,7 +169,7 @@ def deconv1d(x,
   if filter_length > 1 and causal:
     x_ttb = tf.pad(x_ttb, [[0, 0], [filter_length - 1, 0], [0, 0]])
 
-  output_shape = [batch_size * dilation, 1, length / dilation, num_filters]
+  output_shape = [batch_size * dilation, 1, length / dilation * stride, num_filters]
   x_ttb_shape = x_ttb.get_shape().as_list()
   x_4d = tf.reshape(x_ttb, [x_ttb_shape[0], 1,
                             x_ttb_shape[1], num_input_channels])
@@ -175,7 +178,7 @@ def deconv1d(x,
   y_shape = y.get_shape().as_list()
   y = tf.reshape(y, [y_shape[0], y_shape[2], num_filters])
   y = batch_to_time(y, dilation)
-  y.set_shape([batch_size, length, num_filters])
+  y.set_shape([batch_size, length * stride, num_filters])
   return y
 
 def pool1d(x, window_length, name, mode='avg', stride=None):
