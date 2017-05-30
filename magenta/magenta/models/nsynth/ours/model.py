@@ -126,6 +126,7 @@ class Config(object):
       for i in xrange(ae_num_layers):
         if (i % ae_num_stages == 0):
           de = masked.deconv1d(de,
+              causal=False,
               num_filters=ae_width,
               filter_length=ae_filter_length,
               stride=self.ae_hop_length,
@@ -155,6 +156,7 @@ class Config(object):
           num_filters=256,
           filter_length=ae_filter_length,
           name='logits')
+      print("logits " + str(logits.shape.as_list()))
       logits = tf.reshape(logits, [-1, 256])
       probs = tf.nn.softmax(logits, name='softmax')
 
