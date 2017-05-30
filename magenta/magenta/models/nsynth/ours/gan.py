@@ -10,6 +10,7 @@ tf.app.flags.DEFINE_string("target_path", "",
 
 
 FLAGS = tf.app.flags.FLAGS
+x_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits
 
 def main(_):
   batch_size = FLAGS.total_batch_size
@@ -20,13 +21,34 @@ def main(_):
 
   with tf.device('/gpu:0'):
     with tf.variable_scope('generator'):
-      encode_dict = config.encode(source_dict["wav"])
-      decode_dict = config.decode(encode_dict["encoding"])
+      source_f_dict  = config.encode(source_dict["wav"])
+      source_fg_dict = config.decode(source_f_dict["encoding"])
+      tf.get_variable_scope().reuse_variables()
+
+      target_f_dict  = config.encode(target_dict["wav"])
+      target_fg_dict = config.decode(target_f_dict["encoding"])
+
+      source_fg_sample = config.sample(source_fg_dict['predictions'])
+      target_fg_sample = config.sample(target_fg_dict['predictions'])
+
+      source_fgf_dict = config.encode(source_fg_sample, quantized=True)
+
     with tf.variable_scope('discriminator'):
-      d_encode_dict = config.encode(encode_dict["x_quantized"], quantized=True)
-      d_logits = config.discriminator(d_encode_dict["encoding"])
-    loss_dict = config.loss(encode_dict["x_quantized"], decode_dict["logits"])
-    loss = loss_dict["loss"]
+      source_fgd = config.discriminator(source_fg_sample, True, reuse=False)
+      target_fgd = config.discriminator(target_fg_sample, True, reuse=True)
+      target_d   = config.discriminator(target_f_dict["x_quantized"], True, reuse=True)
+
+    zero_labels = tf.fill([batch_size], 0)
+    one_labels = tf.fill([batch_size], 1)
+    two_labels = tf.fill([batch_size], 2)
+
+    source_dis_loss = tf.reduce_mean(x_entropy_loss(logits=source_fgd, labels=zero_labels))
+    source_gen_loss = tf.reduce_mean(x_entropy_loss(logits=source_fgd, labels=two_labels))
+    target_real_dis_loss = tf.reduce_mean(x_entropy_loss(logits=target_d, labels=two_labels))
+    target_fake_dis_loss = tf.reduce_mean(x_entropy_loss(logits=target_fgd, labels=one_labels))
+    target_fake_gen_loss = tf.reduce_mean(x_entropy_loss(logits=target_fgd, labels=two_labels))
+    source_f_fgf_loss = tf.reduce_mean(tf.square(source_fgf_dict["encoding"] - source_f_dict["encoding"]))
+
 
 
 if __name__ == "__main__":

@@ -46,6 +46,7 @@ class Config(object):
     self.ae_bottleneck_width = 16
     self.batch_size = batch_size
     self.tv_const = 1e-6
+    self.pooling_kernel = [1, 16, 1, 1]
 
   def get_batch(self, train_path):
     assert train_path is not None
@@ -154,20 +155,34 @@ class Config(object):
         'logits': logits,
     }
 
+  def sample(self, probs):
+    packed_sample = tf.cast(tf.multinomial(tf.log(probs), 1), tf.int8)
+    sample = tf.reshape(packed_sample, [self.batch_size, -1])
+    return sample
 
-  def discriminator(self, encoding):
-    encoding_reshaped = tf.expand_dims(encoding, axis=len(encoding.shape))
-    pool = tf.nn.max_pool(encoding_reshaped, [1, 16, 1, 1], [1, 16, 1, 1], 'SAME')
-    num_weights = reduce(mul, map(int, pool.shape[1:]), 1)
-    pool_reshaped = tf.reshape(pool, [-1, num_weights])
-    fc1 = fully_connected(pool_reshaped, 512, activation_fn=None)
-    fc2 = fully_connected(fc1, 512, activation_fn=None)
-    logits = fully_connected(fc2, 3, activation_fn=tf.nn.softmax)
-    return logits
+  def discriminator(self, inputs, quantized, reuse):
+    with tf.variable_scope('d_encoder', reuse=reuse):
+      encoding_dict = self.encode(inputs, quantized)
+      encoding = encoding_dict['encoding']
 
+    with tf.variable_scope('d_pooling', reuse=reuse):
+      encoding_reshaped = tf.expand_dims(encoding, axis=len(encoding.shape))
+      pool = tf.nn.max_pool(encoding_reshaped, self.pooling_kernel, self.pooling_kernel, 'SAME')
+      num_weights = reduce(mul, map(int, pool.shape[1:]), 1)
+      pool_reshaped = tf.reshape(pool, [-1, num_weights])
+
+    with tf.variable_scope('d_fc1', reuse=reuse):
+      fc1 = fully_connected(pool_reshaped, 512, activation_fn=None)
+    with tf.variable_scope('d_fc2', reuse=reuse):
+      fc2 = fully_connected(fc1, 512, activation_fn=None)
+    with tf.variable_scope('d_fc3', reuse=reuse):
+      fc3 = fully_connected(fc2, 3, activation_fn=None)
+
+    return fc3
 
   def loss(self, x_quantized, logits):
     x_indices = tf.cast(tf.reshape(x_quantized, [-1]), tf.int32) + 128
+    # x_indices = tf.cast(x_quantized, tf.int32) + 128
     loss = tf.reduce_mean(
         tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=logits, labels=x_indices, name='nll'),
