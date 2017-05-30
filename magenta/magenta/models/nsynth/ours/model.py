@@ -19,6 +19,8 @@ import tensorflow as tf
 from magenta.models.nsynth import reader
 from magenta.models.nsynth import utils
 from magenta.models.nsynth.ours import masked
+from operator import mul
+from tensorflow.contrib.layers import fully_connected
 
 
 class Config(object):
@@ -50,7 +52,7 @@ class Config(object):
     data_train = reader.NSynthDataset(train_path, is_training=True)
     return data_train.get_wavenet_batch(self.batch_size, length=6144)
 
-  def encode(self, inputs, reuse=False):
+  def encode(self, inputs, quantized=False):
     ae_num_stages = self.ae_num_stages
     ae_num_layers = self.ae_num_layers
     ae_filter_length = self.ae_filter_length
@@ -58,9 +60,12 @@ class Config(object):
     ae_bottleneck_width = self.ae_bottleneck_width
 
     # Encode the source with 8-bit Mu-Law.
-    x = inputs
-    tf.logging.info("x shape: %s", str(x.shape.as_list()))
-    x_quantized = utils.mu_law(x)
+    tf.logging.info("inputs shape: %s", str(inputs.shape.as_list()))
+    if not quantized:
+      x = inputs
+      x_quantized = utils.mu_law(x)
+    else:
+      x_quantized = inputs
     x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
     x_scaled = tf.expand_dims(x_scaled, 2)
 
@@ -148,6 +153,18 @@ class Config(object):
         'predictions': probs,
         'logits': logits,
     }
+
+
+  def discriminator(self, encoding):
+    encoding_reshaped = tf.expand_dims(encoding, axis=len(encoding.shape))
+    pool = tf.nn.max_pool(encoding_reshaped, [1, 16, 1, 1], [1, 16, 1, 1], 'SAME')
+    num_weights = reduce(mul, map(int, pool.shape[1:]), 1)
+    pool_reshaped = tf.reshape(pool, [-1, num_weights])
+    fc1 = fully_connected(pool_reshaped, 512, activation_fn=None)
+    fc2 = fully_connected(fc1, 512, activation_fn=None)
+    logits = fully_connected(fc2, 3, activation_fn=tf.nn.softmax)
+    return logits
+
 
   def loss(self, x_quantized, logits):
     x_indices = tf.cast(tf.reshape(x_quantized, [-1]), tf.int32) + 128

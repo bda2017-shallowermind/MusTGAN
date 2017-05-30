@@ -88,3 +88,16 @@ py_binary(
         # tensorflow dep
     ],
 )
+
+py_binary(
+    name = "gan",
+    srcs = [
+        "gan.py",
+    ],
+    deps = [
+        ":configs",
+        "//magenta/models/nsynth:utils",
+        # numpy dep
+        # tensorflow dep
+    ],
+)
