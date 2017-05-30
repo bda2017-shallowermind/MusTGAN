@@ -42,7 +42,7 @@ class Config(object):
     self.ae_filter_length = 3
     self.ae_width = 128
     self.ae_bottleneck_width = 16
-    self.ae_hop_length = 512
+    self.ae_hop_length = 2
     self.batch_size = batch_size
     self.tv_const = 1e-6
 
@@ -88,16 +88,17 @@ class Config(object):
           num_filters=ae_width,
           filter_length=1,
           name='ae_res_%d' % (num_layer + 1))
+      if ((num_layer + 1) % ae_num_stages == 0):
+        en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
 
     en = masked.conv1d(
         en,
         num_filters=self.ae_bottleneck_width,
         filter_length=1,
-        stride=self.ae_hop_length,
         name='ae_bottleneck')
 
     # pooling is optional
-    # en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
+    en = masked.pool1d(en, 16, name='ae_pool', mode='avg')
 
     return {
         'x_quantized': x_quantized,
@@ -117,11 +118,20 @@ class Config(object):
           de,
           num_filters=self.ae_width,
           filter_length=1,
-          stride=self.ae_hop_length,
+          stride=16,
           name='ae_bottleneck')
+      print("de " + str(de.shape.as_list()))
 
       # Residual blocks with skip connections.
       for i in xrange(ae_num_layers):
+        if (i % ae_num_stages == 0):
+          de = masked.deconv1d(de,
+              num_filters=ae_width,
+              filter_length=ae_filter_length,
+              stride=self.ae_hop_length,
+              name='ae_strideddeconv_%d' % (i + 1))
+          print("de " + str(i) + " strided deconv " + str(de.shape.as_list()))
+
         dilation = 2**(ae_num_stages - (i % ae_num_stages) - 1)
         d = tf.nn.relu(de)
         d = masked.deconv1d(
@@ -132,6 +142,7 @@ class Config(object):
             dilation=dilation,
             name='ae_dilateddeconv_%d' % (i + 1))
         d = tf.nn.relu(d)
+        print("d " + str(i) + " deconv " + str(d.shape.as_list()))
         de += masked.conv1d(
             d,
             num_filters=ae_width,
@@ -158,7 +169,7 @@ class Config(object):
         tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=logits, labels=x_indices, name='nll'),
         0,
-        name='loss') + self.tv_const*tf.reduce_mean(tf.image.total_variation(tf.expand_dims(logits, 0)), name='loss')
+        name='loss') #+ self.tv_const*tf.reduce_mean(tf.image.total_variation(tf.expand_dims(logits, 0)), name='loss')
 
     return {
         'loss': loss,
