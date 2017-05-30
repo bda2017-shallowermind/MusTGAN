@@ -120,7 +120,6 @@ class Config(object):
           filter_length=1,
           stride=16,
           name='ae_bottleneck')
-      print("de " + str(de.shape.as_list()))
 
       # Residual blocks with skip connections.
       for i in xrange(ae_num_layers):
@@ -131,7 +130,6 @@ class Config(object):
               filter_length=ae_filter_length,
               stride=self.ae_hop_length,
               name='ae_strideddeconv_%d' % (i + 1))
-          print("de " + str(i) + " strided deconv " + str(de.shape.as_list()))
 
         dilation = 2**(ae_num_stages - (i % ae_num_stages) - 1)
         d = tf.nn.relu(de)
@@ -143,7 +141,6 @@ class Config(object):
             dilation=dilation,
             name='ae_dilateddeconv_%d' % (i + 1))
         d = tf.nn.relu(d)
-        print("d " + str(i) + " deconv " + str(d.shape.as_list()))
         de += masked.conv1d(
             d,
             num_filters=ae_width,
@@ -156,7 +153,6 @@ class Config(object):
           num_filters=256,
           filter_length=ae_filter_length,
           name='logits')
-      print("logits " + str(logits.shape.as_list()))
       logits = tf.reshape(logits, [-1, 256])
       probs = tf.nn.softmax(logits, name='softmax')
 
