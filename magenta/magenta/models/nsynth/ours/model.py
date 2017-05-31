@@ -88,8 +88,15 @@ class Config(object):
           num_filters=ae_width,
           filter_length=1,
           name='ae_res_%d' % (num_layer + 1))
+
       if ((num_layer + 1) % ae_num_stages == 0):
-        en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
+        en = masked.conv1d(
+            en,
+            causal=False,
+            num_filters=ae_width,
+            filter_length=ae_filter_length,
+            stride=self.ae_hop_length,
+            name='ae_stridedconv_%d' % (num_layer + 1))
 
     en = masked.conv1d(
         en,
@@ -97,8 +104,15 @@ class Config(object):
         filter_length=1,
         name='ae_bottleneck')
 
-    # pooling is optional
-    en = masked.pool1d(en, 16, name='ae_pool', mode='avg')
+    en = masked.conv1d(
+        en,
+        causal=False,
+        num_filters=self.ae_bottleneck_width,
+        filter_length=16,
+        stride=16,
+        name='ae_bottleneck_stridedconv')
+
+    print("shape of embedding vector: " + str(en.shape.as_list()))
 
     return {
         'x_quantized': x_quantized,
