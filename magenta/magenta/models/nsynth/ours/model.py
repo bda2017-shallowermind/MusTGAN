@@ -53,7 +53,7 @@ class Config(object):
     data_train = reader.NSynthDataset(train_path, is_training=True)
     return data_train.get_wavenet_batch(self.batch_size, length=6144)
 
-  def encode(self, inputs, quantized=False):
+  def encode(self, inputs):
     ae_num_stages = self.ae_num_stages
     ae_num_layers = self.ae_num_layers
     ae_filter_length = self.ae_filter_length
@@ -62,11 +62,7 @@ class Config(object):
 
     # Encode the source with 8-bit Mu-Law.
     tf.logging.info("inputs shape: %s", str(inputs.shape.as_list()))
-    if not quantized:
-      x = inputs
-      x_quantized = utils.mu_law(x)
-    else:
-      x_quantized = inputs
+    x_quantized = inputs
     x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
     x_scaled = tf.expand_dims(x_scaled, 2)
 
@@ -103,10 +99,7 @@ class Config(object):
     # pooling is optional
     # en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
 
-    return {
-        'x_quantized': x_quantized,
-        'encoding': en,
-    }
+    return en
 
   def decode(self, encoding, reuse=False):
     ae_num_stages = self.ae_num_stages
@@ -150,20 +143,16 @@ class Config(object):
       logits = tf.reshape(logits, [-1, 256])
       probs = tf.nn.softmax(logits, name='softmax')
 
-    return {
-        'predictions': probs,
-        'logits': logits,
-    }
+    return probs
 
   def sample(self, probs):
     packed_sample = tf.cast(tf.multinomial(tf.log(probs), 1), tf.int8)
     sample = tf.reshape(packed_sample, [self.batch_size, -1])
     return sample
 
-  def discriminator(self, inputs, quantized, reuse):
+  def discriminator(self, inputs, reuse):
     with tf.variable_scope('d_encoder', reuse=reuse):
-      encoding_dict = self.encode(inputs, quantized)
-      encoding = encoding_dict['encoding']
+      encoding = self.encode(inputs)
 
     with tf.variable_scope('d_pooling', reuse=reuse):
       encoding_reshaped = tf.expand_dims(encoding, axis=len(encoding.shape))
