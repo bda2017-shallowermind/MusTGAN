@@ -121,15 +121,20 @@ class MusTGAN(object):
       ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=global_step)
 
-    opt = tf.train.SyncReplicasOptimizer(
-        tf.train.AdamOptimizer(lr, epsilon=1e-8),
-        1, # worker_replicas
-        total_num_replicas=1, # worker_replicas
-        variable_averages=ema,
-        variables_to_average=tf.trainable_variables())
+    opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
+    opt_op = opt.minimize(avg_loss, var_list=tf.trainable_variables())
 
-    train_op = slim.learning.create_train_op(avg_loss, opt,
-        global_step=global_step, colocate_gradients_with_ops=True)
+    # opt = tf.train.SyncReplicasOptimizer(
+    #     tf.train.AdamOptimizer(lr, epsilon=1e-8),
+    #     1, # worker_replicas
+    #     total_num_replicas=1, # worker_replicas
+    #     variable_averages=ema,
+    #     variables_to_average=tf.trainable_variables())
+
+    maintain_averages_op = ema.apply(tf.trainable_variables())
+
+    with tf.control_dependencies([opt_op]):
+      train_op = tf.group(maintain_averages_op)
 
     return {
       'loss': avg_loss,

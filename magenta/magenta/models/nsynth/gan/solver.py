@@ -96,9 +96,9 @@ class Solver(object):
         # TODO: load from checkpoint
         assert self.from_scratch == True
         global_init = tf.global_variables_initializer()
-        local_init = tf.local_variables_initializer()
+        # local_init = tf.local_variables_initializer()
         sess.run(global_init)
-        sess.run(local_init)
+        # sess.run(local_init)
         tf.logging.info("Finished initialization")
 
         tf.train.start_queue_runners(sess=sess)
