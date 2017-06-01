@@ -18,6 +18,8 @@ class Solver(object):
 
   def pretrain(self):
     with tf.Graph().as_default() as graph:
+      # TODO: input pipeline for wavs and labels
+      # TODO: len(wavs) == len(labels) == model.num_gpus
       model = self.model.build_pretrain_model(wavs, labels)
 
       with tf.Session(config=self.sess_config) as sess:
@@ -31,7 +33,7 @@ class Solver(object):
             graph=graph)
         saver = tf.train.Saver()
 
-        for step in xrange(model.pretrain_iter):
+        for step in xrange(self.model.pretrain_iter):
           if step > 0 and step % 10 == 0:
             duration = time.time() - start_time
             start_time = time.time()
