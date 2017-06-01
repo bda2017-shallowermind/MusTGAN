@@ -2,6 +2,7 @@ import tensorflow as tf
 import os
 import glob
 from datetime import datetime
+import time
 
 class Solver(object):
 
@@ -111,17 +112,18 @@ class Solver(object):
         for step in xrange(self.model.pretrain_iter):
           if step > 0 and step % self.log_period == 0:
             duration = time.time() - start_time
-            start_time = time.time()
-            _, summary, l, acc = sess.run([
+            _, l, acc = sess.run([
                 model["train_op"],
                 #model["summary_op"],
                 model["loss"],
                 model["accuracy"]])
-            summary_writer.add_summary(summary, step)
-            tf.logging.info("% step: %d/%d, loss: %.6f, acc: %.2f, step/sec: %.2f"
-                % (datetime.now(), step, self.pretrain_iter - 1, l, acc, self.log_period / duration))
+            # summary_writer.add_summary(summary, step)
+            tf.logging.info("%s step: %d/%d, loss: %.6f, acc: %.2f, step/sec: %.2f"
+                % (datetime.now(), step, self.model.pretrain_iter, l, acc, self.log_period / duration))
+            start_time = time.time()
           else:
             sess.run(model["train_op"])
+            start_time = time.time()
 
           if step % self.ckpt_period == 0:
             saver.save(sess, os.path.join(
