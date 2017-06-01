@@ -42,7 +42,8 @@ def main(unused_argv=None):
 
   model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
   solver = Solver(model, FLAGS.wav_path, FLAGS.src_wav_path, FLAGS.trg_wav_path,
-      FLAGS.pretrain_path, FLAGS.train_path, FLAGS.transfered_save_path)
+      FLAGS.pretrain_path, FLAGS.train_path, FLAGS.transfered_save_path,
+      FLAGS.log_period, FLAGS.ckpt_period)
 
   if FLAGS.mode == "pretrain":
     if not tf.gfile.Exists(FLAGS.pretrain_path):
