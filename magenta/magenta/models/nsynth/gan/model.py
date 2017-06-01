@@ -89,6 +89,7 @@ class MusTGAN(object):
             lambda: tf.constant(value))
 
       losses = []
+      accuracies = []
       for i in range(self.num_gpus):
         input_wav = input_wavs[i]
         input_label = input_labels[i]
@@ -106,10 +107,15 @@ class MusTGAN(object):
               net = tf.layers.dense(inputs=net, units=512, activation=None)
               net = tf.layers.dense(inputs=net, units=2, activation=None)
 
+            correct_pred = tf.equal(tf.argmax(net, 1), tf.argmax(input_label, 1))
+            accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+            accuracies.append(accuracy)
+
             loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=input_label, logits=net))
             losses.append(loss)
 
       avg_loss = tf.reduce_mean(losses, 0)
+      avg_accuracy = tf.reduce_mean(accuracy, 0)
 
       ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=global_step)
@@ -127,6 +133,7 @@ class MusTGAN(object):
     return {
       'loss': avg_loss,
       'train_op': train_op,
+      'accuracy': avg_accuracy,
     }
 
   def build_train_model(self):
