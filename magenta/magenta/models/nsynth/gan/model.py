@@ -25,6 +25,7 @@ class MusTGAN(object):
     self.batch_size = batch_size
     self.tv_const = 1e-6
     self.num_gpus = num_gpus
+    self.pretrain_iter = 100000
 
   def f(self, x_quantized, reuse):
     with tf.variable_scope('f', reuse=reuse):
@@ -107,15 +108,15 @@ class MusTGAN(object):
               net = tf.layers.dense(inputs=net, units=512, activation=None)
               net = tf.layers.dense(inputs=net, units=2, activation=None)
 
-            correct_pred = tf.equal(tf.argmax(net, 1), tf.argmax(input_label, 1))
+            correct_pred = tf.equal(tf.argmax(net, 1), input_label)
             accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
             accuracies.append(accuracy)
 
             loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=input_label, logits=net))
             losses.append(loss)
 
-      avg_loss = tf.reduce_mean(losses, 0)
-      avg_accuracy = tf.reduce_mean(accuracy, 0)
+      avg_loss = tf.reduce_mean(losses)
+      avg_accuracy = tf.reduce_mean(accuracies)
 
       ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=global_step)

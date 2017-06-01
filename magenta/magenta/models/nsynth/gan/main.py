@@ -40,7 +40,7 @@ def main(unused_argv=None):
 
   total_batch_size = FLAGS.total_batch_size
   assert total_batch_size % FLAGS.num_gpus == 0
-  per_gpu_batch_size = total_batch_size / FLAGS.gpu
+  per_gpu_batch_size = total_batch_size / FLAGS.num_gpus
 
   model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
   solver = Solver(model, FLAGS.from_scratch, FLAGS.wav_path, FLAGS.src_wav_path, FLAGS.trg_wav_path,

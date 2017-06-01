@@ -1,5 +1,6 @@
 import tensorflow as tf
 import os
+import glob
 from datetime import datetime
 
 class Solver(object):
@@ -21,7 +22,7 @@ class Solver(object):
     self.sess_config.allow_soft_placement = True
 
   def get_batch_from_queue(self, path, batch_size, length=6144):
-    def get_example(self, path, batch_size):
+    def get_example(path, batch_size):
       """Get a single example from the tfrecord file.
 
       Args:
@@ -35,7 +36,7 @@ class Solver(object):
       path_queue = tf.train.input_producer(
           [path],
           num_epochs=None,
-          shuffle=self.is_training,
+          shuffle=True,
           capacity=capacity)
       unused_key, serialized_example = reader.read(path_queue)
       features = {
@@ -50,17 +51,16 @@ class Solver(object):
       example = tf.parse_single_example(serialized_example, features)
       return example
 
-    example = self.get_example(path, batch_size)
+    example = get_example(path, batch_size)
     wav = example["audio"]
-    label = example["instrument_family"]
     wav = tf.slice(wav, [0], [64000])
-
     # random crop
     cropped_wav = tf.random_crop(wav, [length])
 
     # labeling
     # TODO: cleanup this code
-    label = tf.cast(instrument_family, tf.int32)
+    label = example["instrument_family"]
+    label = tf.cast(label, tf.int64)
     label = (label - 1) / 7
     label = tf.reshape(label, [])
 
@@ -77,7 +77,7 @@ class Solver(object):
     num_gpus = self.model.num_gpus
 
     with tf.Graph().as_default() as graph:
-      train_files = glob.glob(FLAGS.wav_path + "/*")
+      train_files = glob.glob(self.wav_path + "/*")
       assert len(train_files) == num_gpus
 
       wavs = []
@@ -85,7 +85,7 @@ class Solver(object):
       for i in range(num_gpus):
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('gpu_name_scope_%d' % i):
-            wav, label = get_batch_from_queue(train_files[i], self.model.batch_size))
+            wav, label = self.get_batch_from_queue(train_files[i], self.model.batch_size)
             wavs.append(wav)
             labels.append(label)
 
@@ -100,7 +100,8 @@ class Solver(object):
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(
             logdir=self.pretrain_path,
-            graph=graph)
+            graph=sess.graph)
+        tf.train.write_graph(sess.graph, self.pretrain_path, "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
 
         for step in xrange(self.model.pretrain_iter):
@@ -122,7 +123,8 @@ class Solver(object):
             saver.save(sess, os.path.join(
                 self.pretrain_path, 'model.ckpt'), global_step=step)
 
-
   def train(self):
+    return
 
   def eval(self):
+    return

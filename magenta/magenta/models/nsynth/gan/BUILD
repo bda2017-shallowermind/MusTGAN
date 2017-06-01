@@ -67,7 +67,7 @@ py_binary(
     ],
     deps = [
         ":configs",
-        ":solver"
+        ":solver",
         "//magenta/models/nsynth:utils",
         # numpy dep
         # tensorflow dep
