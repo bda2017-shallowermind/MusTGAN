@@ -1,4 +1,7 @@
 import tensorflow as tf
+from magenta.models.nsynth.gan import masked
+
+slim = tf.contrib.slim
 
 class MusTGAN(object):
   def __init__(self, batch_size, num_gpus):
@@ -73,6 +76,7 @@ class MusTGAN(object):
 
   def build_pretrain_model(self, input_wavs, input_labels):
     assert len(input_wavs) == self.num_gpus
+    assert len(input_labels) == self.num_gpus
 
     with tf.device('/cpu:0'):
       global_step = tf.contrib.framework.get_or_create_global_step()
@@ -87,21 +91,21 @@ class MusTGAN(object):
       losses = []
       for i in range(self.num_gpus):
         input_wav = input_wavs[i]
+        input_label = input_labels[i]
         reuse = False if i == 0 else True
+
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('gpu_name_scope_%d' % i):
             # build the model graph
             en = self.f(input_wav, reuse=reuse) # (batch_size, 6144, ae_bottleneck=16)
             net = masked.pool1d(en, 16, name='pretrain_pool', mode='max')
-            
-            with tf.variable_scope('pretrain_fc1', reuse=reuse):
+
+            with tf.variable_scope('pretrain_fc', reuse=reuse):
               net = tf.layers.dense(inputs=net, units=512, activation=None)
-            with tf.variable_scope('pretrain_fc2', reuse=reuse):
               net = tf.layers.dense(inputs=net, units=512, activation=None)
-            with tf.variable_scope('pretrain_fc3', reuse=reuse):
               net = tf.layers.dense(inputs=net, units=2, activation=None)
 
-            loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=input_labels, logits=net))
+            loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=input_label, logits=net))
             losses.append(loss)
 
       avg_loss = tf.reduce_mean(losses, 0)
