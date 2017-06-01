@@ -94,8 +94,11 @@ class Solver(object):
       with tf.Session(config=self.sess_config) as sess:
         # TODO: load from checkpoint
         assert self.from_scratch == True
-        init = tf.global_variables_initializer()
-        sess.run(init)
+        global_init = tf.global_variables_initializer()
+        local_init = tf.local_variables_initializer()
+        sess.run(global_init)
+        sess.run(local_init)
+        tf.logging.info("Finished initialization")
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(
@@ -103,6 +106,7 @@ class Solver(object):
             graph=sess.graph)
         tf.train.write_graph(sess.graph, self.pretrain_path, "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
+        tf.logging.info("Start running")
 
         for step in xrange(self.model.pretrain_iter):
           if step > 0 and step % self.log_period == 0:
@@ -110,7 +114,7 @@ class Solver(object):
             start_time = time.time()
             _, summary, l, acc = sess.run([
                 model["train_op"],
-                model["summary_op"],
+                #model["summary_op"],
                 model["loss"],
                 model["accuracy"]])
             summary_writer.add_summary(summary, step)
