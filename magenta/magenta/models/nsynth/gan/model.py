@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 class MusTGAN(object):
-  def __init__(self, batch_size, mode='train'):
+  def __init__(self, batch_size):
     self.learning_rate_schedule = {
         0: 3e-4,
         2500: 1e-4,
@@ -22,14 +22,11 @@ class MusTGAN(object):
     self.batch_size = batch_size
     self.tv_const = 1e-6
 
-  def f():
+  def build_pretrain_model(self):
     pass
 
-  def pretrain_model():
+  def build_train_model(self):
     pass
 
-  def g():
-    pass
-
-  def d():
+  def build_eval_model(self):
     pass
