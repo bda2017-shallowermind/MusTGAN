@@ -99,6 +99,7 @@ class MusTGAN(object):
             # build the model graph
             en = self.f(input_wav, reuse=reuse) # (batch_size, 6144, ae_bottleneck=16)
             net = masked.pool1d(en, 16, name='pretrain_pool', mode='max')
+            net = tf.reshape(net, [self.batch_size, -1])
 
             with tf.variable_scope('pretrain_fc', reuse=reuse):
               net = tf.layers.dense(inputs=net, units=512, activation=None)
