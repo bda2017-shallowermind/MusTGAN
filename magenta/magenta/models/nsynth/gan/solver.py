@@ -4,10 +4,11 @@ from datetime import datetime
 
 class Solver(object):
 
-  def __init__(self, model, wav_path, src_wav_path, trg_wav_path,
+  def __init__(self, model, from_scratch, wav_path, src_wav_path, trg_wav_path,
                pretrain_path, train_path, transfered_save_path,
                log_period, ckpt_period):
     self.model = model
+    self.from_scratch = from_scratch
     self.wav_path = wav_path
     self.src_wav_path = src_wav_path
     self.trg_wav_path = trg_wav_path

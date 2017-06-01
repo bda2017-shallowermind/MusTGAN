@@ -11,17 +11,19 @@ tf.app.flags.DEFINE_integer("num_gpus", 1,
                             "Number of gpus to use.")
 
 tf.app.flags.DEFINE_string("wav_path", None,
-                           "Path of wav files for pretraining")
+                           "Path of wav files for pretraining.")
 tf.app.flags.DEFINE_string("src_wav_path", None,
-                           "Path of src domain wav files for GAN training")
+                           "Path of src domain wav files for GAN training.")
 tf.app.flags.DEFINE_string("trg_wav_path", None,
-                           "Path of trg domain wav files for GAN training")
+                           "Path of trg domain wav files for GAN training.")
 tf.app.flags.DEFINE_string("pretrain_path", None,
-                           "Path of model checkpoint and summary logs for pretraining")
+                           "Path of model checkpoint and summary logs for pretraining.")
 tf.app.flags.DEFINE_string("train_path", None,
-                           "Path of model checkpoint and summary logs for GAN training")
+                           "Path of model checkpoint and summary logs for GAN training.")
 tf.app.flags.DEFINE_string("transfered_save_path", None,
-                           "Path of transfered wav files generated from domain transfer GAN")
+                           "Path of transfered wav files generated from domain transfer GAN.")
+tf.app.flags.DEFINE_boolean("from_scratch", True,
+                            "Start (pre)training from scratch.")
 
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
@@ -41,7 +43,7 @@ def main(unused_argv=None):
   per_gpu_batch_size = total_batch_size / FLAGS.gpu
 
   model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
-  solver = Solver(model, FLAGS.wav_path, FLAGS.src_wav_path, FLAGS.trg_wav_path,
+  solver = Solver(model, FLAGS.from_scratch, FLAGS.wav_path, FLAGS.src_wav_path, FLAGS.trg_wav_path,
       FLAGS.pretrain_path, FLAGS.train_path, FLAGS.transfered_save_path,
       FLAGS.log_period, FLAGS.ckpt_period)
 
