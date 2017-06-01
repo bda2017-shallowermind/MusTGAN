@@ -1,0 +1,1 @@
+bazel-bin/magenta/models/nsynth/ours/generate --checkpoint_path=./logs/model.ckpt-100000 --wavdir=/cmsdata/ssd1/cmslab/jason/NSynth_Dataset/wav/temp/ --sample_length=61440 --batch_size=6 --wav_savedir=./generated_wav/

@@ -26,14 +26,14 @@ class Config(object):
 
   def __init__(self, batch_size):
     self.learning_rate_schedule = {
-        0: 3e-4,
-        2500: 1e-4,
-        5000: 6e-5,
-        10000: 4e-5,
-        20000: 2e-5,
-        40000: 1e-5,
-        60000: 6e-6,
-        80000: 2e-6,
+        0: 3e-3,
+        2500: 1e-3,
+        5000: 6e-4,
+        10000: 4e-4,
+        20000: 2e-4,
+        40000: 1e-4,
+        60000: 6e-5,
+        80000: 2e-5,
     }
     self.num_stages = 10
     self.filter_length = 3
@@ -41,7 +41,7 @@ class Config(object):
     self.ae_num_layers = 30
     self.ae_filter_length = 3
     self.ae_width = 128
-    self.ae_bottleneck_width = 16
+    self.ae_bottleneck_width = 32
     self.ae_hop_length = 2
     self.batch_size = batch_size
     self.tv_const = 1e-6
@@ -99,7 +99,7 @@ class Config(object):
 
     # pooling is optional
     en = masked.pool1d(en, 16, name='ae_pool', mode='avg')
-
+    tf.logging.info("en shape: %s", str(en.shape.as_list()))
     return {
         'x_quantized': x_quantized,
         'encoding': en,
