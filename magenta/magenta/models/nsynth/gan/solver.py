@@ -1,6 +1,8 @@
 import tensorflow as tf
 import os
+import glob
 from datetime import datetime
+import time
 
 class Solver(object):
 
@@ -21,7 +23,7 @@ class Solver(object):
     self.sess_config.allow_soft_placement = True
 
   def get_batch_from_queue(self, path, batch_size, length=6144):
-    def get_example(self, path, batch_size):
+    def get_example(path, batch_size):
       """Get a single example from the tfrecord file.
 
       Args:
@@ -35,7 +37,7 @@ class Solver(object):
       path_queue = tf.train.input_producer(
           [path],
           num_epochs=None,
-          shuffle=self.is_training,
+          shuffle=True,
           capacity=capacity)
       unused_key, serialized_example = reader.read(path_queue)
       features = {
@@ -50,42 +52,45 @@ class Solver(object):
       example = tf.parse_single_example(serialized_example, features)
       return example
 
-    example = self.get_example(path, batch_size)
+    example = get_example(path, batch_size)
     wav = example["audio"]
-    label = example["instrument_family"]
     wav = tf.slice(wav, [0], [64000])
-
     # random crop
     cropped_wav = tf.random_crop(wav, [length])
 
     # labeling
     # TODO: cleanup this code
-    label = tf.cast(instrument_family, tf.int32)
-    label = (label - 1) / 7
+    label = example["pitch"]
     label = tf.reshape(label, [])
 
-    num_preprocess_threads = 8
+    num_preprocess_threads = 4
     min_queue_examples = 100 * batch_size
     return tf.train.shuffle_batch(
         [cropped_wav, label],
         batch_size,
-        num_threads=8,
-        capacity=2 * num_preprocess_threads * batch_size + min_queue_examples,
+        num_threads=num_preprocess_threads,
+        capacity=2 * min_queue_examples,
         min_after_dequeue=min_queue_examples)
 
   def pretrain(self):
     num_gpus = self.model.num_gpus
 
     with tf.Graph().as_default() as graph:
-      train_files = glob.glob(FLAGS.wav_path + "/*")
-      assert len(train_files) == num_gpus
+      train_files = glob.glob(self.wav_path + "/*")
+      if (len(train_files) < num_gpus):
+        raise RuntimeError("Number of training files: %d, while number of gpus: %d"
+            % (len(train_files), num_gpus))
+      elif (len(train_files) > num_gpus):
+        tf.logging.warning("Number of training files: %d, while number of gpus: %d"
+            % (len(train_files), num_gpus))
+      train_files = train_files[:num_gpus]
 
       wavs = []
       labels = []
       for i in range(num_gpus):
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('gpu_name_scope_%d' % i):
-            wav, label = get_batch_from_queue(train_files[i], self.model.batch_size))
+            wav, label = self.get_batch_from_queue(train_files[i], self.model.batch_size)
             wavs.append(wav)
             labels.append(label)
 
@@ -94,27 +99,33 @@ class Solver(object):
       with tf.Session(config=self.sess_config) as sess:
         # TODO: load from checkpoint
         assert self.from_scratch == True
-        init = tf.global_variables_initializer()
-        sess.run(init)
+        global_init = tf.global_variables_initializer()
+        # local_init = tf.local_variables_initializer()
+        sess.run(global_init)
+        # sess.run(local_init)
+        tf.logging.info("Finished initialization")
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(
             logdir=self.pretrain_path,
-            graph=graph)
+            graph=sess.graph)
+        tf.train.write_graph(sess.graph, self.pretrain_path, "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
+        tf.logging.info("Start running")
 
+        start_time = time.time()
         for step in xrange(self.model.pretrain_iter):
           if step > 0 and step % self.log_period == 0:
             duration = time.time() - start_time
             start_time = time.time()
-            _, summary, l, acc = sess.run([
+            _, l, acc = sess.run([
                 model["train_op"],
-                model["summary_op"],
+                #model["summary_op"],
                 model["loss"],
                 model["accuracy"]])
-            summary_writer.add_summary(summary, step)
-            tf.logging.info("% step: %d/%d, loss: %.6f, acc: %.2f, step/sec: %.2f"
-                % (datetime.now(), step, self.pretrain_iter - 1, l, acc, self.log_period / duration))
+            # summary_writer.add_summary(summary, step)
+            tf.logging.info("step: %d, loss: %.6f, acc: %.4f, step/sec: %.3f"
+                % (step, l, acc, self.log_period / duration))
           else:
             sess.run(model["train_op"])
 
@@ -122,7 +133,8 @@ class Solver(object):
             saver.save(sess, os.path.join(
                 self.pretrain_path, 'model.ckpt'), global_step=step)
 
-
   def train(self):
+    return
 
   def eval(self):
+    return
