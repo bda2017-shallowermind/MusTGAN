@@ -106,7 +106,7 @@ class MusTGAN(object):
             with tf.variable_scope('pretrain_fc', reuse=reuse):
               net = tf.layers.dense(inputs=net, units=512, activation=None)
               net = tf.layers.dense(inputs=net, units=512, activation=None)
-              net = tf.layers.dense(inputs=net, units=2, activation=None)
+              net = tf.layers.dense(inputs=net, units=128, activation=None)
 
             correct_pred = tf.equal(tf.argmax(net, 1), input_label)
             accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))

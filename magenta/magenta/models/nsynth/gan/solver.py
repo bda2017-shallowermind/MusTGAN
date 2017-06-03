@@ -60,12 +60,10 @@ class Solver(object):
 
     # labeling
     # TODO: cleanup this code
-    label = example["instrument_family"]
-    label = tf.cast(label, tf.int64)
-    label = (label - 1) / 7
+    label = example["pitch"]
     label = tf.reshape(label, [])
 
-    num_preprocess_threads = 8
+    num_preprocess_threads = 16
     min_queue_examples = 100 * batch_size
     return tf.train.shuffle_batch(
         [cropped_wav, label],
