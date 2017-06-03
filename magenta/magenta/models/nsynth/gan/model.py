@@ -3,6 +3,7 @@ from magenta.models.nsynth.gan import masked
 import numpy as np
 
 slim = tf.contrib.slim
+x_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits
 
 class MusTGAN(object):
   def __init__(self, batch_size, num_gpus):
@@ -28,6 +29,11 @@ class MusTGAN(object):
     self.tv_const = 1e-6
     self.num_gpus = num_gpus
     self.pretrain_iter = 100000
+    self.alpha = 15.
+    self.beta = 15.
+    self.f_train_period = 15
+    self.g_train_iter_per_step = 1
+    self.d_train_iter_per_step = 1
 
   def mu_law(self, x, mu=255):
     out = tf.sign(x) * tf.log(1 + mu * tf.abs(x)) / np.log(1 + mu)
@@ -50,7 +56,7 @@ class MusTGAN(object):
       x = tf.expand_dims(x, 2)
 
       en = masked.conv1d(
-          mu_law,
+          x,
           causal=False,
           num_filters=ae_width,
           filter_length=ae_filter_length,
@@ -69,6 +75,7 @@ class MusTGAN(object):
         d = tf.nn.relu(d)
         en += masked.conv1d(
             d,
+            causal=False,
             num_filters=ae_width,
             filter_length=1,
             name='ae_res_%d' % (num_layer + 1))
@@ -83,6 +90,7 @@ class MusTGAN(object):
 
       en = masked.conv1d(
           en,
+          causal=False,
           num_filters=self.ae_bottleneck_width,
           filter_length=16,
           stride=16,
@@ -91,6 +99,67 @@ class MusTGAN(object):
 
     return en
 
+  def g(self, encoding, reuse):
+    with tf.variable_scope('g', reuse=reuse):
+      de = encoding
+      de = masked.deconv1d(
+          de,
+          causal=False,
+          num_filters=self.ae_width,
+          filter_length=16,
+          stride=16,
+          name='ae_bottleneck')
+
+      # Residual blocks with skip connections.
+      for i in xrange(self.ae_num_layers):
+        if i % self.ae_num_stages == 0:
+          de = masked.deconv1d(
+              de,
+              causal=False,
+              num_filters=self.ae_width,
+              filter_length=self.ae_filter_length,
+              stride=self.ae_hop_length,
+              name='ae_stridedconv_%d' % (i + 1))
+
+        dilation = 2 ** (self.ae_num_stages - (i % self.ae_num_stages) - 1)
+        d = tf.nn.relu(de)
+        d = masked.deconv1d(
+            d,
+            causal=False,
+            num_filters=self.ae_width,
+            filter_length=self.ae_filter_length,
+            dilation=dilation,
+            name='ae_dilateddeconv_%d' % (i + 1))
+        d = tf.nn.relu(d)
+        de += masked.conv1d(
+            d,
+            num_filters=self.ae_width,
+            filter_length=1,
+            name='ae_res_%d' % (i + 1))
+
+      ge = masked.deconv1d(
+          de,
+          causal=False,
+          num_filters=1,
+          filter_length=self.ae_filter_length,
+          name='ge')
+      tf.logging.info('final ge shape: %s' % str(ge.shape.as_list()))
+
+    return ge
+
+  def discriminator(self, x, reuse):
+    with tf.variable_scope('discriminator', reuse=reuse):
+      fx = self.f(x, reuse)
+
+      with tf.variable_scope('pool', reuse=reuse):
+        fx_reshaped = tf.reshape(fx, [self.batch_size, -1])
+
+      with tf.variable_scope('fc', reuse=reuse):
+        fc1 = tf.layers.dense(inputs=fx_reshaped, units=512, activation=None)
+        fc2 = tf.layers.dense(inputs=fc1, units=512, activation=None)
+        fc3 = tf.layers.dense(inputs=fc2, units=3, activation=None)
+
+    return fc3
 
   def build_pretrain_model(self, input_wavs, input_labels):
     assert len(input_wavs) == self.num_gpus
@@ -164,8 +233,116 @@ class MusTGAN(object):
       'accuracy': avg_accuracy,
     }
 
-  def build_train_model(self):
-    pass
+
+  def build_train_model(self, src_wavs, trg_wavs):
+    assert len(src_wavs) == self.num_gpus
+    assert len(trg_wavs) == self.num_gpus
+
+    with tf.device('/cpu:0'):
+      global_step = tf.contrib.framework.get_or_create_global_step()
+
+      lr = tf.constant(self.learning_rate_schedule[0])
+      for key, value in self.learning_rate_schedule.iteritems():
+        lr = tf.cond(
+            tf.less(global_step, key),
+            lambda: lr,
+            lambda: tf.constant(value))
+
+      d_losses = []
+      g_losses = []
+      f_losses = []
+      for i in range(self.num_gpus):
+        src_wav = src_wavs[i]
+        trg_wav = trg_wavs[i]
+        reuse = False if i == 0 else True
+
+        with tf.device('/gpu:%d' % i):
+          with tf.name_scope('gpu_name_scope_%d' % i):
+            zero_labels = tf.fill([batch_size], 0)
+            one_labels = tf.fill([batch_size], 1)
+            two_labels = tf.fill([batch_size], 2)
+
+            src_x    = self.mu_law(src_wav)
+            src_fx   = self.f(src_x, reuse)
+            src_gfx  = self.g(src_fx, reuse)
+            src_fgfx = self.f(src_gfx, reuse=True)
+            src_dgfx = self.discriminator(src_gfx, reuse)
+
+            src_dis_loss = tf.reduce_mean(x_entropy_loss(logits=src_dgfx, labels=zero_labels))
+            src_gen_loss = tf.reduce_mean(x_entropy_loss(logits=src_dgfx, labels=two_labels))
+
+            trg_x    = self.mu_law(trg_wav)
+            trg_fx   = self.f(trg_x, reuse=True)
+            trg_gfx  = self.g(trg_fx, reuse=True)
+            trg_dgfx = self.discriminator(trg_gfx, reuse=True)
+            trg_dx   = self.discriminator(trg_x, reuse=True)
+
+            trg_dis_loss = tf.reduce_mean(x_entropy_loss(logits=trg_dgfx, labels=one_labels))
+            trg_gen_loss = tf.reduce_mean(x_entropy_loss(logits=trg_dgfx, labels=two_labels))
+            trg_real_dis_loss = tf.reduce_mean(x_entropy_loss(logits=trg_dx, labels=two_labels))
+
+            src_const_loss = tf.reduce_mean(tf.square(src_fgfx - src_fx)) * self.alpha
+            trg_tid_loss = tf.reduce_mean(tf.square(trg_x - trg_gfx)) * self.beta
+
+            d_loss = src_dis_loss + trg_dis_loss + trg_real_dis_loss
+            g_loss = src_gen_loss + trg_gen_loss + trg_tid_loss
+            f_loss = src_const_loss
+
+            d_losses.append(d_loss)
+            g_losses.append(g_loss)
+            f_losses.append(f_loss)
+
+
+      d_loss = tf.reduce_mean(d_losses)
+      g_loss = tf.reduce_mean(g_losses)
+      f_loss = tf.reduce_mean(f_losses)
+      d_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
+      g_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='g')
+      f_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='f')
+
+      ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=global_step)
+
+    d_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
+    g_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
+    f_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
+
+    d_opt_op = opt.minimize(
+        d_loss,
+        global_step=global_step,
+        var_list=d_vars,
+        colocate_gradients_with_ops=True)
+    g_opt_op = opt.minimize(
+        g_loss,
+        global_step=global_step,
+        var_list=g_vars,
+        colocate_gradients_with_ops=True)
+    f_opt_op = opt.minimize(
+        f_loss,
+        global_step=global_step,
+        var_list=f_vars,
+        colocate_gradients_with_ops=True)
+
+
+    maintain_averages_d_op = ema.apply(d_vars)
+    maintain_averages_g_op = ema.apply(g_vars)
+    maintain_averages_f_op = ema.apply(f_vars)
+
+    with tf.control_dependencies([d_opt_op]):
+      d_train_op = tf.group(maintain_averages_d_op)
+    with tf.control_dependencies([g_opt_op]):
+      g_train_op = tf.group(maintain_averages_g_op)
+    with tf.control_dependencies([f_opt_op]):
+      f_train_op = tf.group(maintain_averages_f_op)
+
+    return {
+      'd_loss': d_loss,
+      'g_loss': g_loss,
+      'f_loss': f_loss,
+      'd_train_op': d_train_op,
+      'g_train_op': g_train_op,
+      'f_train_op': f_train_op,
+    }
 
   def build_eval_model(self):
     pass
