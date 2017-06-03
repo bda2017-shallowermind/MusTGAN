@@ -53,7 +53,7 @@ class MusTGAN(object):
       x = tf.expand_dims(x, 2)
 
       en = masked.conv1d(
-          mu_law,
+          x,
           causal=False,
           num_filters=ae_width,
           filter_length=ae_filter_length,
