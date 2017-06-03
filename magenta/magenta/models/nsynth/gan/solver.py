@@ -115,8 +115,9 @@ class Solver(object):
 
         start_time = time.time()
         for step in xrange(self.model.pretrain_iter):
-          if step > 0 and (step + 1) % self.log_period == 0:
+          if step > 0 and step % self.log_period == 0:
             duration = time.time() - start_time
+            start_time = time.time()
             _, l, acc = sess.run([
                 model["train_op"],
                 #model["summary_op"],
@@ -125,7 +126,6 @@ class Solver(object):
             # summary_writer.add_summary(summary, step)
             tf.logging.info("step: %d, loss: %.6f, acc: %.4f, step/sec: %.3f"
                 % (step, l, acc, self.log_period / duration))
-            start_time = time.time()
           else:
             sess.run(model["train_op"])
 
