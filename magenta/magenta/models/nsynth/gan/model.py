@@ -29,6 +29,15 @@ class MusTGAN(object):
     self.num_gpus = num_gpus
     self.pretrain_iter = 100000
 
+  def mu_law(self, x, mu=255):
+    out = tf.sign(x) * tf.log(1 + mu * tf.abs(x)) / np.log(1 + mu)
+    return out
+
+  def inv_mu_law(self, x, mu=255):
+    out = tf.sign(x) / mu * ((1 + mu)**tf.abs(out) - 1)
+    out = tf.where(tf.equal(x, 0), x, out)
+    return out
+
   def f(self, x, reuse):
     with tf.variable_scope('f', reuse=reuse):
       ae_num_stages = self.ae_num_stages
@@ -38,9 +47,7 @@ class MusTGAN(object):
       ae_bottleneck_width = self.ae_bottleneck_width
 
       tf.logging.info("x shape: %s" % str(x.shape.as_list()))
-      # mu-law encoding
-      mu_law = tf.sign(x) * tf.log(1 + 255 * tf.abs(x)) / np.log(256)
-      mu_law = tf.expand_dims(mu_law, 2)
+      x = tf.expand_dims(x, 2)
 
       en = masked.conv1d(
           mu_law,
@@ -109,7 +116,8 @@ class MusTGAN(object):
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('gpu_name_scope_%d' % i):
             # build the model graph
-            en = self.f(input_wav, reuse=reuse) # (batch_size, 6144, ae_bottleneck=16)
+            mu_law_input_wav = self.mu_law(input_wav)
+            en = self.f(mu_law_input_wav, reuse=reuse) # (batch_size, 48, ae_bottleneck=16)
             net = masked.pool1d(en, 16, name='pretrain_pool', mode='max')
             net = tf.reshape(net, [self.batch_size, -1])
 
