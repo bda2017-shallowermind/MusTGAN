@@ -236,7 +236,7 @@ class MusTGAN(object):
     assert len(trg_wavs) == self.num_gpus
 
     with tf.device('/cpu:0'):
-      d_global_step = tf.contrib.framework.get_or_create_global_step()
+      global_step = tf.contrib.framework.get_or_create_global_step()
 
       lr = tf.constant(self.learning_rate_schedule[0])
       for key, value in self.learning_rate_schedule.iteritems():
