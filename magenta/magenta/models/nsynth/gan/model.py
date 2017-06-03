@@ -104,7 +104,7 @@ class MusTGAN(object):
           causal=False,
           num_filters=self.ae_width,
           filter_length=16,
-          stride=16
+          stride=16,
           name='ae_bottleneck')
 
       # Residual blocks with skip connections.
