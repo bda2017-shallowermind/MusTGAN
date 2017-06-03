@@ -35,7 +35,6 @@ class MusTGAN(object):
     self.g_train_iter_per_step = 1
     self.d_train_iter_per_step = 1
 
-
   def mu_law(self, x, mu=255):
     out = tf.sign(x) * tf.log(1 + mu * tf.abs(x)) / np.log(1 + mu)
     return out
