@@ -63,13 +63,13 @@ class Solver(object):
     label = example["pitch"]
     label = tf.reshape(label, [])
 
-    num_preprocess_threads = 16
+    num_preprocess_threads = 4
     min_queue_examples = 100 * batch_size
     return tf.train.shuffle_batch(
         [cropped_wav, label],
         batch_size,
-        num_threads=8,
-        capacity=2 * num_preprocess_threads * batch_size + min_queue_examples,
+        num_threads=num_preprocess_threads,
+        capacity=2 * min_queue_examples,
         min_after_dequeue=min_queue_examples)
 
   def pretrain(self):
