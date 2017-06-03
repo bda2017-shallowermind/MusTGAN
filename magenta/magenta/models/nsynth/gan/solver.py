@@ -8,7 +8,7 @@ class Solver(object):
 
   def __init__(self, model, from_scratch, wav_path, src_wav_path, trg_wav_path,
                pretrain_path, train_path, transfered_save_path,
-               log_period, ckpt_period):
+               log_period, ckpt_period, pretrain_iter, train_iter):
     self.model = model
     self.from_scratch = from_scratch
     self.wav_path = wav_path
@@ -19,6 +19,8 @@ class Solver(object):
     self.transfered_save_path = transfered_save_path
     self.log_period = log_period
     self.ckpt_period = ckpt_period
+    self.pretrain_iter = pretrain_iter
+    self.train_iter = train_iter
     self.sess_config = tf.ConfigProto()
     self.sess_config.allow_soft_placement = True
 
@@ -114,7 +116,7 @@ class Solver(object):
         tf.logging.info("Start running")
 
         start_time = time.time()
-        for step in xrange(self.model.pretrain_iter):
+        for step in xrange(self.pretrain_iter):
           if step > 0 and step % self.log_period == 0:
             duration = time.time() - start_time
             start_time = time.time()
@@ -196,7 +198,8 @@ class Solver(object):
         f_train_period = self.model.f_train_period
         d_train_iter_per_step = self.model.d_train_iter_per_step
         g_train_iter_per_step = self.model.g_train_iter_per_step
-        for step in xrange(self.model.train_iter):
+        # while True:
+        for step in xrange(self.train_iter):
           # train d and g
           for _ in xrange(d_train_iter_per_step):
             sess.run(model["d_train_op"])
@@ -221,8 +224,11 @@ class Solver(object):
             start_time = time.time()
 
           if step > 0 and step % self.ckpt_period == 0:
+            tf.logging.info("Checkpointing model at step %d" % step)
             saver.save(sess, os.path.join(
                 self.train_path, 'model.ckpt'), global_step=step)
+            tf.logging.info("Finished checkpoint at step %d" % step)
+            start_time = time.time()
 
   def eval(self):
     return
