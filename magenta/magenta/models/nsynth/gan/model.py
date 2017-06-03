@@ -28,9 +28,11 @@ class MusTGAN(object):
     self.batch_size = batch_size
     self.tv_const = 1e-6
     self.num_gpus = num_gpus
-    self.pretrain_iter = 100000
     self.alpha = 15.
     self.beta = 15.
+    self.f_train_period = 15
+    self.g_train_iter_per_step = 1
+    self.d_train_iter_per_step = 1
 
   def mu_law(self, x, mu=255):
     out = tf.sign(x) * tf.log(1 + mu * tf.abs(x)) / np.log(1 + mu)
@@ -140,6 +142,7 @@ class MusTGAN(object):
           num_filters=1,
           filter_length=self.ae_filter_length,
           name='ge')
+      ge = tf.squeeze(ge, [2])
       tf.logging.info('final ge shape: %s' % str(ge.shape.as_list()))
 
     return ge
@@ -255,9 +258,9 @@ class MusTGAN(object):
 
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('gpu_name_scope_%d' % i):
-            zero_labels = tf.fill([batch_size], 0)
-            one_labels = tf.fill([batch_size], 1)
-            two_labels = tf.fill([batch_size], 2)
+            zero_labels = tf.fill([self.batch_size], 0)
+            one_labels = tf.fill([self.batch_size], 1)
+            two_labels = tf.fill([self.batch_size], 2)
 
             src_x    = self.mu_law(src_wav)
             src_fx   = self.f(src_x, reuse)
@@ -304,17 +307,17 @@ class MusTGAN(object):
     g_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
     f_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
 
-    d_opt_op = opt.minimize(
+    d_opt_op = d_opt.minimize(
         d_loss,
         global_step=global_step,
         var_list=d_vars,
         colocate_gradients_with_ops=True)
-    g_opt_op = opt.minimize(
+    g_opt_op = g_opt.minimize(
         g_loss,
         global_step=global_step,
         var_list=g_vars,
         colocate_gradients_with_ops=True)
-    f_opt_op = opt.minimize(
+    f_opt_op = f_opt.minimize(
         f_loss,
         global_step=global_step,
         var_list=f_vars,

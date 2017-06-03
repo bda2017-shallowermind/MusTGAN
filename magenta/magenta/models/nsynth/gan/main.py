@@ -29,6 +29,10 @@ tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
 tf.app.flags.DEFINE_integer("ckpt_period", 250,
                             "Checkpoint the current model after every ckpt_period steps.")
+tf.app.flags.DEFINE_integer("pretrain_iter", 100000,
+                            "Pretrain the model for pretrain_iter steps.")
+tf.app.flags.DEFINE_integer("train_iter", 100000,
+                            "Train the model for train_iter steps.")
 
 tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
@@ -45,7 +49,7 @@ def main(unused_argv=None):
   model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
   solver = Solver(model, FLAGS.from_scratch, FLAGS.wav_path, FLAGS.src_wav_path, FLAGS.trg_wav_path,
       FLAGS.pretrain_path, FLAGS.train_path, FLAGS.transfered_save_path,
-      FLAGS.log_period, FLAGS.ckpt_period)
+      FLAGS.log_period, FLAGS.ckpt_period, FLAGS.pretrain_iter, FLAGS.train_iter)
 
   if FLAGS.mode == "pretrain":
     if not tf.gfile.Exists(FLAGS.pretrain_path):
