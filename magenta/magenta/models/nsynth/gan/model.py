@@ -1,5 +1,6 @@
 import tensorflow as tf
 from magenta.models.nsynth.gan import masked
+import numpy as np
 
 slim = tf.contrib.slim
 
@@ -22,12 +23,13 @@ class MusTGAN(object):
     self.ae_filter_length = 3
     self.ae_width = 128
     self.ae_bottleneck_width = 16
+    self.ae_hop_length = 2
     self.batch_size = batch_size
     self.tv_const = 1e-6
     self.num_gpus = num_gpus
     self.pretrain_iter = 100000
 
-  def f(self, x_quantized, reuse):
+  def f(self, x, reuse):
     with tf.variable_scope('f', reuse=reuse):
       ae_num_stages = self.ae_num_stages
       ae_num_layers = self.ae_num_layers
@@ -35,12 +37,13 @@ class MusTGAN(object):
       ae_width = self.ae_width
       ae_bottleneck_width = self.ae_bottleneck_width
 
-      # Encode the source with 8-bit Mu-Law.
-      x_scaled = tf.cast(x_quantized, tf.float32) / 128.0
-      x_scaled = tf.expand_dims(x_scaled, 2)
+      tf.logging.info("x shape: %s" % str(x.shape.as_list()))
+      # mu-law encoding
+      mu_law = tf.sign(x) * tf.log(1 + 255 * tf.abs(x)) / np.log(256)
+      mu_law = tf.expand_dims(mu_law, 2)
 
       en = masked.conv1d(
-          x_scaled,
+          mu_law,
           causal=False,
           num_filters=ae_width,
           filter_length=ae_filter_length,
@@ -62,15 +65,22 @@ class MusTGAN(object):
             num_filters=ae_width,
             filter_length=1,
             name='ae_res_%d' % (num_layer + 1))
+        if ((num_layer + 1) % ae_num_stages == 0):
+          en = masked.conv1d(
+              en,
+              causal=False,
+              num_filters=ae_width,
+              filter_length=ae_filter_length,
+              stride=self.ae_hop_length,
+              name='ae_stridedconv_%d' % (num_layer + 1))
 
       en = masked.conv1d(
           en,
           num_filters=self.ae_bottleneck_width,
-          filter_length=1,
+          filter_length=16,
+          stride=16,
           name='ae_bottleneck')
-
-      # pooling is optional
-      # en = masked.pool1d(en, self.ae_hop_length, name='ae_pool', mode='avg')
+      tf.logging.info("en shape: %s" % str(en.shape.as_list()))
 
     return en
 
