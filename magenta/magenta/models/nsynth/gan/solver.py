@@ -139,13 +139,20 @@ class Solver(object):
     with tf.Graph().as_default() as graph:
       src_train_files = glob.glob(self.src_wav_path + "/*")
       trg_train_files = glob.glob(self.trg_wav_path + "/*")
-      assert len(src_train_files)==len(trg_train_files)
       if (len(src_train_files) < num_gpus):
-        raise RuntimeError("Number of training files: %d, " \
+        raise RuntimeError("Number of training src files: %d, " \
             "while number of gpus: %d" % (len(src_train_files), num_gpus))
       elif (len(src_train_files) > num_gpus):
-        tf.logging.warning("Number of training files: %d, " \
+        tf.logging.warning("Number of training src files: %d, " \
             "while number of gpus: %d" % (len(src_train_files), num_gpus))
+
+      if (len(trg_train_files) < num_gpus):
+        raise RuntimeError("Number of training trg files: %d, " \
+            "while number of gpus: %d" % (len(trg_train_files), num_gpus))
+      elif (len(trg_train_files) > num_gpus):
+        tf.logging.warning("Number of training trg files: %d, " \
+            "while number of gpus: %d" % (len(trg_train_files), num_gpus))
+
       src_train_files = src_train_files[:num_gpus]
       trg_train_files = trg_train_files[:num_gpus]
 
@@ -164,6 +171,9 @@ class Solver(object):
       model = self.model.build_train_model(src_wavs, trg_wavs)
 
       with tf.Session(config=self.sess_config) as sess:
+        global_init = tf.global_variables_initializer()
+        sess.run(global_init)
+
         # TODO: load pretrained f
         if self.from_scratch == False:
           variables_to_restore = slim.get_model_variables(scpoe='f')
@@ -171,9 +181,6 @@ class Solver(object):
         # TODO: load trained whole model
         else:
           pass
-
-        global_init = tf.global_variables_initializer()
-        sess.run(global_init)
         tf.logging.info("Finished initialization")
 
         tf.train.start_queue_runners(sess=sess)
@@ -207,13 +214,13 @@ class Solver(object):
             dl, gl, fl = sess.run([
                 model["d_loss"],
                 model["g_loss"],
-                model["f_loss"])
+                model["f_loss"]])
             tf.logging.info("step: %d, d_loss: %.6f, " \
                 "g_loss: %.6f, f_loss: %.6f, step/sec: %.3f"
                 % (step, dl, gl, fl, self.log_period / duration))
             start_time = time.time()
 
-          if step % self.ckpt_period == 0:
+          if step > 0 and step % self.ckpt_period == 0:
             saver.save(sess, os.path.join(
                 self.train_path, 'model.ckpt'), global_step=step)
 
