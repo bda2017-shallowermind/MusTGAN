@@ -122,7 +122,11 @@ class MusTGAN(object):
           decay=0.9999, num_updates=global_step)
 
     opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
-    opt_op = opt.minimize(avg_loss, var_list=tf.trainable_variables())
+    opt_op = opt.minimize(
+        avg_loss,
+        global_step=global_step,
+        var_list=tf.trainable_variables(),
+        colocate_gradients_with_ops=True)
 
     # opt = tf.train.SyncReplicasOptimizer(
     #     tf.train.AdamOptimizer(lr, epsilon=1e-8),

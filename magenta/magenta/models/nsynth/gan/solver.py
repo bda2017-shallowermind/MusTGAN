@@ -79,7 +79,13 @@ class Solver(object):
 
     with tf.Graph().as_default() as graph:
       train_files = glob.glob(self.wav_path + "/*")
-      assert len(train_files) == num_gpus
+      if (len(train_files) < num_gpus):
+        raise RuntimeError("Number of training files: %d, while number of gpus: %d"
+            % (len(train_files), num_gpus))
+      elif (len(train_files) > num_gpus):
+        tf.logging.warning("Number of training files: %d, while number of gpus: %d"
+            % (len(train_files), num_gpus))
+      train_files = train_files[:num_gpus]
 
       wavs = []
       labels = []
