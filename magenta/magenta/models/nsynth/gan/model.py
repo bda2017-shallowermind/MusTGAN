@@ -166,7 +166,7 @@ class MusTGAN(object):
     assert len(input_labels) == self.num_gpus
 
     with tf.device('/cpu:0'):
-      global_step = tf.contrib.framework.get_or_create_global_step()
+      global_step = tf.train.get_or_create_global_step()
 
       lr = tf.constant(self.learning_rate_schedule[0])
       for key, value in self.learning_rate_schedule.iteritems():
@@ -228,6 +228,7 @@ class MusTGAN(object):
       train_op = tf.group(maintain_averages_op)
 
     return {
+      'global_step': global_step,
       'loss': avg_loss,
       'train_op': train_op,
       'accuracy': avg_accuracy,
