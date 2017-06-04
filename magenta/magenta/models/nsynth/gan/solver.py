@@ -6,21 +6,9 @@ import time
 
 class Solver(object):
 
-  def __init__(self, model, from_scratch, wav_path, src_wav_path, trg_wav_path,
-               pretrain_path, train_path, transfered_save_path,
-               log_period, ckpt_period, pretrain_iter, train_iter):
+  def __init__(self, model, FLAGS):
     self.model = model
-    self.from_scratch = from_scratch
-    self.wav_path = wav_path
-    self.src_wav_path = src_wav_path
-    self.trg_wav_path = trg_wav_path
-    self.pretrain_path = pretrain_path
-    self.train_path = train_path
-    self.transfered_save_path = transfered_save_path
-    self.log_period = log_period
-    self.ckpt_period = ckpt_period
-    self.pretrain_iter = pretrain_iter
-    self.train_iter = train_iter
+    self.FLAGS = FLAGS
     self.sess_config = tf.ConfigProto()
     self.sess_config.allow_soft_placement = True
 
@@ -75,10 +63,11 @@ class Solver(object):
         min_after_dequeue=min_queue_examples)
 
   def pretrain(self):
+    FLAGS = self.FLAGS
     num_gpus = self.model.num_gpus
 
     with tf.Graph().as_default() as graph:
-      train_files = glob.glob(self.wav_path + "/*")
+      train_files = glob.glob(FLAGS.wav_path + "/*")
       if (len(train_files) < num_gpus):
         raise RuntimeError("Number of training files: %d, while number of gpus: %d"
             % (len(train_files), num_gpus))
@@ -99,48 +88,64 @@ class Solver(object):
       model = self.model.build_pretrain_model(wavs, labels)
 
       with tf.Session(config=self.sess_config) as sess:
-        # TODO: load from checkpoint
-        assert self.from_scratch == True
         global_init = tf.global_variables_initializer()
-        # local_init = tf.local_variables_initializer()
         sess.run(global_init)
-        # sess.run(local_init)
         tf.logging.info("Finished initialization")
+
+        ckpt_path = None
+        if not FLAGS.from_scratch:
+          if FLAGS.ckpt_id is None:
+            ckpt_path = tf.train.latest_checkpoint(FLAGS.pretrain_path)
+          else:
+            ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-" + FLAGS.ckpt_id)
+
+        if ckpt_path is None:
+          tf.logging.info("Skip loading checkpoint, start training from scartch...")
+        else:
+          variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+          restorer = tf.train.Saver(variables_to_restore)
+          restorer.restore(sess, ckpt_path)
+          tf.logging.info("Complete restoring parameters from %s" % ckpt_path)
+
+        from_step = sess.run(model["global_step"])
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(
-            logdir=self.pretrain_path,
+            logdir=FLAGS.pretrain_path,
             graph=sess.graph)
-        tf.train.write_graph(sess.graph, self.pretrain_path, "graph.pbtxt", as_text=True)
+        tf.train.write_graph(sess.graph, FLAGS.pretrain_path, "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
-        tf.logging.info("Start running")
 
         start_time = time.time()
-        for step in xrange(self.pretrain_iter):
-          if step > 0 and step % self.log_period == 0:
-            duration = time.time() - start_time
+        for step in xrange(from_step, FLAGS.pretrain_iter):
+          if step % FLAGS.ckpt_period == 0:
+            saver.save(sess, os.path.join(
+                FLAGS.pretrain_path, 'model.ckpt'), global_step=step)
             start_time = time.time()
+
+          if (step + 1) % FLAGS.log_period == 0:
             _, l, acc = sess.run([
                 model["train_op"],
                 #model["summary_op"],
                 model["loss"],
                 model["accuracy"]])
             # summary_writer.add_summary(summary, step)
+            duration = time.time() - start_time
+            start_time = time.time()
             tf.logging.info("step: %d, loss: %.6f, acc: %.4f, step/sec: %.3f"
-                % (step, l, acc, self.log_period / duration))
+                % (step + 1, l, acc, FLAGS.log_period / duration))
           else:
             sess.run(model["train_op"])
 
-          if step % self.ckpt_period == 0:
-            saver.save(sess, os.path.join(
-                self.pretrain_path, 'model.ckpt'), global_step=step)
+
 
   def train(self):
+    FLAGS = self.FLAGS
     num_gpus = self.model.num_gpus
 
     with tf.Graph().as_default() as graph:
-      src_train_files = glob.glob(self.src_wav_path + "/*")
-      trg_train_files = glob.glob(self.trg_wav_path + "/*")
+      src_train_files = glob.glob(FLAGS.src_wav_path + "/*")
+      trg_train_files = glob.glob(FLAGS.trg_wav_path + "/*")
       if (len(src_train_files) < num_gpus):
         raise RuntimeError("Number of training src files: %d, " \
             "while number of gpus: %d" % (len(src_train_files), num_gpus))
@@ -177,7 +182,7 @@ class Solver(object):
         sess.run(global_init)
 
         # TODO: load pretrained f
-        if self.from_scratch == False:
+        if FLAGS.from_scratch == False:
           variables_to_restore = slim.get_model_variables(scpoe='f')
           pass
         # TODO: load trained whole model
@@ -187,9 +192,9 @@ class Solver(object):
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(
-            logdir=self.train_path,
+            logdir=FLAGS.train_path,
             graph=sess.graph)
-        tf.train.write_graph(sess.graph, self.train_path,
+        tf.train.write_graph(sess.graph, FLAGS.train_path,
             "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
         tf.logging.info("Start training")
@@ -199,7 +204,7 @@ class Solver(object):
         d_train_iter_per_step = self.model.d_train_iter_per_step
         g_train_iter_per_step = self.model.g_train_iter_per_step
         # while True:
-        for step in xrange(self.train_iter):
+        for step in xrange(FLAGS.train_iter):
           # train d and g
           for _ in xrange(d_train_iter_per_step):
             sess.run(model["d_train_op"])
@@ -212,7 +217,7 @@ class Solver(object):
             sess.run(model["f_train_op"])
 
           # logging loss info
-          if step > 0 and (step + 1) % self.log_period == 0:
+          if step > 0 and (step + 1) % FLAGS.log_period == 0:
             duration = time.time() - start_time
             dl, gl, fl = sess.run([
                 model["d_loss"],
@@ -220,13 +225,13 @@ class Solver(object):
                 model["f_loss"]])
             tf.logging.info("step: %d, d_loss: %.6f, " \
                 "g_loss: %.6f, f_loss: %.6f, step/sec: %.3f"
-                % (step, dl, gl, fl, self.log_period / duration))
+                % (step, dl, gl, fl, FLAGS.log_period / duration))
             start_time = time.time()
 
-          if step > 0 and step % self.ckpt_period == 0:
+          if step > 0 and step % FLAGS.ckpt_period == 0:
             tf.logging.info("Checkpointing model at step %d" % step)
             saver.save(sess, os.path.join(
-                self.train_path, 'model.ckpt'), global_step=step)
+                FLAGS.train_path, 'model.ckpt'), global_step=step)
             tf.logging.info("Finished checkpoint at step %d" % step)
             start_time = time.time()
 

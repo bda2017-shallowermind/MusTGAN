@@ -22,8 +22,10 @@ tf.app.flags.DEFINE_string("train_path", None,
                            "Path of model checkpoint and summary logs for GAN training.")
 tf.app.flags.DEFINE_string("transfered_save_path", None,
                            "Path of transfered wav files generated from domain transfer GAN.")
-tf.app.flags.DEFINE_boolean("from_scratch", True,
+tf.app.flags.DEFINE_boolean("from_scratch", False,
                             "Start (pre)training from scratch.")
+tf.app.flags.DEFINE_boolean("ckpt_id", None,
+                            "Checkpoint id, e.g. 500")
 
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
@@ -47,9 +49,7 @@ def main(unused_argv=None):
   per_gpu_batch_size = total_batch_size / FLAGS.num_gpus
 
   model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
-  solver = Solver(model, FLAGS.from_scratch, FLAGS.wav_path, FLAGS.src_wav_path, FLAGS.trg_wav_path,
-      FLAGS.pretrain_path, FLAGS.train_path, FLAGS.transfered_save_path,
-      FLAGS.log_period, FLAGS.ckpt_period, FLAGS.pretrain_iter, FLAGS.train_iter)
+  solver = Solver(model, FLAGS)
 
   if FLAGS.mode == "pretrain":
     if not tf.gfile.Exists(FLAGS.pretrain_path):
