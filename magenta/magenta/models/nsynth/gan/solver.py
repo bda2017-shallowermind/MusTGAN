@@ -245,10 +245,6 @@ class Solver(object):
     sample_length = FLAGS.sample_length
     batch_size = FLAGS.batch_size
     
-    if FLAGS.transferred_save_path is None:
-      tf.logging.fatal("No transferred save path is given")
-      sys.exit(1)
-
     if FLAGS.ckpt_id: #checkpoint_path:
       checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-" + FLAGS.ckpt_id)
     else:
@@ -269,7 +265,7 @@ class Solver(object):
 
     tf.logging.info("Will restore from checkpoint: %s", checkpoint_path)
 
-    wavdir = FLAGS.wav_path
+    wavdir = FLAGS.eval_wav_path
     tf.logging.info("Will load Wavs from %s." % wavdir)
 
 
