@@ -149,5 +149,15 @@ class MusTGAN(object):
   def build_train_model(self):
     pass
 
-  def build_eval_model(self):
-    pass
+  def build_eval_model(self, input_wavs):
+    reuse = False
+    with tf.device('/gpu:0'):
+      with tf.name_scope('gan_model_var_scope'):
+        # build the model graph
+        en = self.f(wav_placeholder, reuse=reuse) # (batch_size, 61440?, ae_bottleneck=16)
+        de = self.g(en, reuse=reuse) # (batch_size, num_channel=128)
+           
+    return {
+      'encoding': en,
+      'decoding': de,
+    }

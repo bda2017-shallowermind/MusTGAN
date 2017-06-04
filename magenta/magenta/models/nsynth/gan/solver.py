@@ -3,6 +3,8 @@ import os
 import glob
 from datetime import datetime
 import time
+import librosa
+from magenta.models.nsynth import utils
 
 class Solver(object):
 
@@ -137,4 +139,99 @@ class Solver(object):
     return
 
   def eval(self):
+    FLAGS = self.FLAGS
+    num_gpus = self.model.num_gpus
+    sample_length = FLAGS.sample_length
+    batch_size = FLAGS.batch_size
+    
+    if FLAGS.transferred_save_path is None:
+      tf.logging.fatal("No transferred save path is given")
+      sys.exit(1)
+
+    if FLAGS.ckpt_id: #checkpoint_path:
+      checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-" + FLAGS.ckpt_id)
+    else:
+      tf.logging.info("Will load latest checkpoint from %s.", FLAGS.train_path)
+      while not tf.gfile.Exists(FLAGS.train_path):
+        tf.logging.fatal("\tTrained model save dir '%s' does not exist!", expdir)
+        sys.exit(1)
+
+      try:
+        checkpoint_path = tf.train.latest_checkpoint(FLAGS.train_path)
+      except tf.errors.NotFoundError:
+        tf.logging.fatal("There was a problem determining the latest checkpoint.")
+        sys.exit(1)
+
+    if not tf.train.checkpoint_exists(checkpoint_path):
+      tf.logging.fatal("Invalid checkpoint path: %s", checkpoint_path)
+      sys.exit(1)
+
+    tf.logging.info("Will restore from checkpoint: %s", checkpoint_path)
+
+    wavdir = FLAGS.wav_path
+    tf.logging.info("Will load Wavs from %s." % wavdir)
+
+
+    with tf.Graph().as_default() as graph:
+      # build model
+      sample_length = FLAGS.sample_length
+      batch_size = FLAGS.batch_size
+      wav_placeholder = tf.placeholder(
+          tf.float32, shape=[batch_size, sample_length])
+      
+      model = self.model
+      model.build_eval_model(wav_placeholder)
+
+      with tf.Session(config=self.config) as sess:
+        # load trained model
+        if checkpoint_path is None:
+          raise RuntimeError("No checkpoint is given")
+        else:
+          variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+          restorer = tf.train.Saver(variables_to_restore)
+          restorer.restore(sess, ckpt_path)
+          tf.logging.info("Complete restoring parameters from %s" % ckpt_path)
+        # input wavs
+        def is_wav(f):
+          return f.lower().endswith(".wav")
+
+        wavfiles = sorted([
+          os.path.join(wavdir, fname) for fname in tf.gfile.ListDirectory(wavdir)
+          if is_wav(fname)
+        ])
+    
+        def get_fnames(files):
+          fnames_list = []
+          for f in files:
+            fnames_list.append(ntpath.basename(f))
+          return fnames_list
+
+        for start_file in xrange(0, len(wavfiles), batch_size):
+          batch_number = (start_file / batch_size) + 1
+          tf.logging.info("On batch %d.", batch_number)
+          end_file = start_file + batch_size
+          files = wavfiles[start_file:end_file]
+          wavfile_names = get_fnames(files)
+
+          # Ensure that files has batch_size elements.
+          batch_filler = batch_size - len(files)
+          files.extend(batch_filler * [files[-1]])
+
+          wavdata = np.array([utils.load_wav(f)[:sample_length] for f in files])
+
+          # transfer music
+          decoded_wav = sess.run(model['decoding'], 
+                              feed_dict={wav_placeholder: wavdata})  
+          transferred_wav = utils.inv_mu_law(decoded_wav - 128)
+
+          def write_wav(waveform, sample_rate, pathname, wavfile_name):
+            filename = "%s_decode.wav" % wavfile_name.strip(".wav")
+            pathname += "/"+filename
+            y = np.array(waveform)
+            librosa.output.write_wav(pathname, y, sample_rate)
+            print('Updated wav file at {}'.format(pathname))
+
+          for wav_file, filename in zip(transferred_wav, wavfile_names):
+            write_wav(wav_file, FLAGS.sample_rate, FLAGS.transferred_save_path, filename)
+    
     return
