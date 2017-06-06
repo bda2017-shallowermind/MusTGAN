@@ -26,7 +26,7 @@ tf.app.flags.DEFINE_string("transferred_save_path", None,
                            "Path of transferred wav files generated from domain transfer GAN.")
 tf.app.flags.DEFINE_boolean("from_scratch", False,
                             "Start (pre)training from scratch.")
-tf.app.flags.DEFINE_integer("ckpt_id", -1,
+tf.app.flags.DEFINE_integer("ckpt_id", None,
                             "Checkpoint id, e.g. 500")
 
 tf.app.flags.DEFINE_integer("log_period", 25,

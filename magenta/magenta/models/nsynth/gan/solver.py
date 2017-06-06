@@ -100,7 +100,7 @@ class Solver(object):
 
         ckpt_path = None
         if not FLAGS.from_scratch:
-          if FLAGS.ckpt_id < 1:
+          if FLAGS.ckpt_id is None:
             ckpt_path = tf.train.latest_checkpoint(FLAGS.pretrain_path)
           else:
             ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-%d" % FLAGS.ckpt_id)
@@ -269,7 +269,7 @@ class Solver(object):
     sample_length = FLAGS.sample_length
     batch_size = FLAGS.total_batch_size
 
-    if FLAGS.ckpt_id > 0: #checkpoint_path:
+    if FLAGS.ckpt_id is not None: #checkpoint_path:
       checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-%d" % FLAGS.ckpt_id)
     else:
       tf.logging.info("Will load latest checkpoint from %s.", FLAGS.train_path)
