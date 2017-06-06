@@ -55,10 +55,10 @@ def load_wav(path):
   Returns:
     The 16bit data in the range [-1, 1].
   """
-  _, data_16bit = scipy.io.wavfile.read(tf.gfile.Open(path, "r"))
+  _, data_16bit = scipy.io.wavfile.read(path)
   # Assert we are working with 16-bit audio.
-  assert data_16bit.dtype == np.int16
-  return data_16bit.astype(np.float32) / 2**15
+  #assert data_16bit.dtype == np.int16
+  return data_16bit.astype(np.float32) #/ 2**15
 
 
 def mu_law(x, mu=255):

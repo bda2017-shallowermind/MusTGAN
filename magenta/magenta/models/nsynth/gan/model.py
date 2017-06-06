@@ -1,6 +1,7 @@
-import tensorflow as tf
-from magenta.models.nsynth.gan import masked
 import numpy as np
+import tensorflow as tf
+
+from magenta.models.nsynth.gan import masked
 
 slim = tf.contrib.slim
 x_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits
@@ -234,7 +235,6 @@ class MusTGAN(object):
       'accuracy': avg_accuracy,
     }
 
-
   def build_train_model(self, src_wavs, trg_wavs):
     assert len(src_wavs) == self.num_gpus
     assert len(trg_wavs) == self.num_gpus
@@ -345,5 +345,15 @@ class MusTGAN(object):
       'f_train_op': f_train_op,
     }
 
-  def build_eval_model(self):
-    pass
+  def build_eval_model(self, input_wavs):
+    reuse = False
+    with tf.device('/gpu:0'):
+      with tf.name_scope('gan_model_var_scope'):
+        # build the model graph
+        en = self.f(input_wavs, reuse=reuse) # (batch_size, 61440?, ae_bottleneck=16)
+        de = self.g(en, reuse=reuse) # (batch_size, num_channel=128)
+
+    return {
+      'encoding': en,
+      'decoding': de,
+    }

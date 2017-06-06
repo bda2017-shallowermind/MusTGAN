@@ -1,8 +1,14 @@
-import tensorflow as tf
-import os
 import glob
-from datetime import datetime
+import librosa
+import ntpath
+import numpy as np
+import os
+import tensorflow as tf
 import time
+
+from datetime import datetime
+from magenta.models.nsynth import utils
+
 
 class Solver(object):
 
@@ -94,10 +100,10 @@ class Solver(object):
 
         ckpt_path = None
         if not FLAGS.from_scratch:
-          if FLAGS.ckpt_id is None:
+          if FLAGS.ckpt_id < 1:
             ckpt_path = tf.train.latest_checkpoint(FLAGS.pretrain_path)
           else:
-            ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-" + FLAGS.ckpt_id)
+            ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-%d" % FLAGS.ckpt_id)
 
         if ckpt_path is None:
           tf.logging.info("Skip loading checkpoint, start training from scartch...")
@@ -115,6 +121,7 @@ class Solver(object):
             graph=sess.graph)
         tf.train.write_graph(sess.graph, FLAGS.pretrain_path, "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
+        tf.logging.info("Start running")
 
         start_time = time.time()
         for step in xrange(from_step, FLAGS.pretrain_iter):
@@ -136,7 +143,6 @@ class Solver(object):
                 % (step + 1, l, acc, FLAGS.log_period / duration))
           else:
             sess.run(model["train_op"])
-
 
 
   def train(self):
@@ -235,5 +241,101 @@ class Solver(object):
             tf.logging.info("Finished checkpoint at step %d" % step)
             start_time = time.time()
 
+    return
+
   def eval(self):
+    FLAGS = self.FLAGS
+    sample_length = FLAGS.sample_length
+    batch_size = FLAGS.total_batch_size
+
+    if FLAGS.ckpt_id > 0: #checkpoint_path:
+      checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-%d" % FLAGS.ckpt_id)
+    else:
+      tf.logging.info("Will load latest checkpoint from %s.", FLAGS.train_path)
+      while not tf.gfile.Exists(FLAGS.train_path):
+        tf.logging.fatal("\tTrained model save dir '%s' does not exist!", FLAGS.train_path)
+        sys.exit(1)
+
+      try:
+        checkpoint_path = tf.train.latest_checkpoint(FLAGS.train_path)
+      except tf.errors.NotFoundError:
+        tf.logging.fatal("There was a problem determining the latest checkpoint.")
+        sys.exit(1)
+
+    if not tf.train.checkpoint_exists(checkpoint_path):
+      tf.logging.fatal("Invalid checkpoint path: %s", checkpoint_path)
+      sys.exit(1)
+
+    tf.logging.info("Will restore from checkpoint: %s", checkpoint_path)
+
+    wavdir = FLAGS.eval_wav_path
+    tf.logging.info("Will load Wavs from %s." % wavdir)
+
+
+    with tf.Graph().as_default() as graph:
+      # build model
+      sample_length = FLAGS.sample_length
+      wav_placeholder = tf.placeholder(
+          tf.float32, shape=[batch_size, sample_length])
+
+      model = self.model.build_eval_model(wav_placeholder)
+
+      with tf.Session(config=self.sess_config) as sess:
+        # load trained model
+        if checkpoint_path is None:
+          raise RuntimeError("No checkpoint is given")
+        else:
+          variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+          restorer = tf.train.Saver(variables_to_restore)
+          restorer.restore(sess, checkpoint_path)
+          tf.logging.info("Complete restoring parameters from %s" % checkpoint_path)
+        # input wavs
+        def is_wav(f):
+          return f.lower().endswith(".wav")
+
+        wavfiles = sorted([
+          os.path.join(wavdir, fname) for fname in tf.gfile.ListDirectory(wavdir)
+          if is_wav(fname)
+        ])
+
+        def get_fnames(files):
+          fnames_list = []
+          for f in files:
+            fnames_list.append(ntpath.basename(f))
+          return fnames_list
+
+        tf.logging.info("wavfiles %d", len(wavfiles))
+
+        for start_file in xrange(0, len(wavfiles), batch_size):
+          batch_number = (start_file / batch_size) + 1
+          tf.logging.info("On batch %d.", batch_number)
+          end_file = start_file + batch_size
+          files = wavfiles[start_file:end_file]
+          wavfile_names = get_fnames(files)
+
+          # Ensure that files has batch_size elements.
+          batch_filler = batch_size - len(files)
+          files.extend(batch_filler * [files[-1]])
+
+          wavdatas = np.array([utils.load_wav(f)[:sample_length] for f in files])
+
+          # transfer music
+          decoded_wavs = sess.run(model['decoding'],
+                              feed_dict={wav_placeholder: wavdatas})
+          transferred_wav = utils.inv_mu_law(decoded_wavs - 128)
+
+          def write_wav(waveform, sample_rate, pathname, wavfile_name):
+            filename = "%s_decode.wav" % wavfile_name.strip(".wav")
+            pathname += "/"+filename
+            y = np.array(waveform)
+            librosa.output.write_wav(pathname, y, sample_rate)
+            print('Updated wav file at {}'.format(pathname))
+
+          tf.logging.info("wavdatas %d", len(wavdatas))
+          tf.logging.info("wavfile_names %d", len(wavfile_names))
+          tf.logging.info("transferred_wav %s", str(transferred_wav.shape.as_list()))
+
+          for wav_file, filename in zip(transferred_wav.eval(), wavfile_names):
+            write_wav(wav_file, FLAGS.sample_rate, FLAGS.transferred_save_path, filename)
+
     return
