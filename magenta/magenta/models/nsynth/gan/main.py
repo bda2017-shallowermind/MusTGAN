@@ -1,4 +1,3 @@
-import json
 import tensorflow as tf
 from model import MusTGAN
 from solver import Solver
