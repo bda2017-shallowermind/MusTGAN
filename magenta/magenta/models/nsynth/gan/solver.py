@@ -5,6 +5,8 @@ from datetime import datetime
 import time
 import librosa
 from magenta.models.nsynth import utils
+import ntpath
+import numpy as np
 
 class Solver(object):
 
@@ -276,18 +278,17 @@ class Solver(object):
       wav_placeholder = tf.placeholder(
           tf.float32, shape=[batch_size, sample_length])
       
-      model = self.model
-      model.build_eval_model(wav_placeholder)
+      model = self.model.build_eval_model(wav_placeholder)
 
-      with tf.Session(config=self.config) as sess:
+      with tf.Session(config=self.sess_config) as sess:
         # load trained model
         if checkpoint_path is None:
           raise RuntimeError("No checkpoint is given")
         else:
           variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
           restorer = tf.train.Saver(variables_to_restore)
-          restorer.restore(sess, ckpt_path)
-          tf.logging.info("Complete restoring parameters from %s" % ckpt_path)
+          restorer.restore(sess, checkpoint_path)
+          tf.logging.info("Complete restoring parameters from %s" % checkpoint_path)
         # input wavs
         def is_wav(f):
           return f.lower().endswith(".wav")
@@ -302,6 +303,8 @@ class Solver(object):
           for f in files:
             fnames_list.append(ntpath.basename(f))
           return fnames_list
+        
+        tf.logging.info("wavfiles %d", len(wavfiles))
 
         for start_file in xrange(0, len(wavfiles), batch_size):
           batch_number = (start_file / batch_size) + 1
@@ -314,12 +317,12 @@ class Solver(object):
           batch_filler = batch_size - len(files)
           files.extend(batch_filler * [files[-1]])
 
-          wavdata = np.array([utils.load_wav(f)[:sample_length] for f in files])
+          wavdatas = np.array([utils.load_wav(f)[:sample_length] for f in files])
 
           # transfer music
-          decoded_wav = sess.run(model['decoding'], 
-                              feed_dict={wav_placeholder: wavdata})  
-          transferred_wav = utils.inv_mu_law(decoded_wav - 128)
+          decoded_wavs = sess.run(model['decoding'], 
+                              feed_dict={wav_placeholder: wavdatas})  
+          transferred_wav = utils.inv_mu_law(decoded_wavs - 128)
 
           def write_wav(waveform, sample_rate, pathname, wavfile_name):
             filename = "%s_decode.wav" % wavfile_name.strip(".wav")
@@ -328,7 +331,11 @@ class Solver(object):
             librosa.output.write_wav(pathname, y, sample_rate)
             print('Updated wav file at {}'.format(pathname))
 
-          for wav_file, filename in zip(transferred_wav, wavfile_names):
+          tf.logging.info("wavdatas %d", len(wavdatas))
+          tf.logging.info("wavfile_names %d", len(wavfile_names))
+          tf.logging.info("transferred_wav %s", str(transferred_wav.shape.as_list()))
+          
+          for wav_file, filename in zip(transferred_wav.eval(), wavfile_names):
             write_wav(wav_file, FLAGS.sample_rate, FLAGS.transferred_save_path, filename)
     
     return

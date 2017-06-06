@@ -42,7 +42,7 @@ tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
 
-tf.app.flags.DEFINE_integer("sample_length", 64000, "Sample length".) 
+tf.app.flags.DEFINE_integer("sample_length", 61440, "Sample length.") 
 tf.app.flags.DEFINE_integer("batch_size", 1, "batch size for eval")
 tf.app.flags.DEFINE_integer("sample_rate", 16000, "Sample length.")
 
