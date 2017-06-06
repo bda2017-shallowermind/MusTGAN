@@ -12,6 +12,14 @@ def parse_hps_file(hps_filename):
     j = json.load(f)
     hps = {}
 
+    if "ae_num_layers" in j:
+      assert isinstance(j["ae_num_layers"], int)
+      tf.logging.info("Using custom ae_num_layers %d to train the model."
+                      % j["ae_num_layers"])
+      hps["ae_num_layers"] = j["ae_num_layers"]
+    else:
+      tf.logging.info("Using default ae_num_layers to train the model.")
+
     if "d_lr_schedule" in j:
       tf.logging.info("Using custom d_lr_schedule to train the model.")
       d_lr_schedule = {int(k): float(v) for k, v in j["d_lr_schedule"].iteritems()}
@@ -100,14 +108,13 @@ class MusTGAN(object):
         80000: 1e-6,
     })
 
-    self.num_stages = 10
     self.filter_length = 3
     self.ae_num_stages = 10
-    self.ae_num_layers = 30
+    self.ae_num_layers = hps.get("ae_num_layers", 20)
     self.ae_filter_length = 3
     self.ae_width = 128
     self.ae_bottleneck_width = 16
-    self.ae_hop_length = 2
+    self.ae_hop_length = 4
     self.batch_size = batch_size
     self.num_gpus = num_gpus
     self.alpha = hps.get("alpha", 30.)
@@ -123,6 +130,9 @@ class MusTGAN(object):
     out = tf.sign(x) / mu * ((1 + mu)**tf.abs(out) - 1)
     out = tf.where(tf.equal(x, 0), x, out)
     return out
+
+  def leakly_relu(self, x, alpha=0.1):
+    return tf.maximum(x, alpha * x)
 
   def lr_schedule(self, step, schedule):
     lr = tf.constant(schedule[0])
@@ -153,7 +163,7 @@ class MusTGAN(object):
 
       for num_layer in xrange(ae_num_layers):
         dilation = 2**(num_layer % ae_num_stages)
-        d = tf.nn.relu(en)
+        d = self.leakly_relu(en)
         d = masked.conv1d(
             d,
             causal=False,
@@ -161,7 +171,7 @@ class MusTGAN(object):
             filter_length=ae_filter_length,
             dilation=dilation,
             name='ae_dilatedconv_%d' % (num_layer + 1))
-        d = tf.nn.relu(d)
+        d = self.leakly_relu(d)
         en += masked.conv1d(
             d,
             causal=False,
@@ -173,7 +183,7 @@ class MusTGAN(object):
               en,
               causal=False,
               num_filters=ae_width,
-              filter_length=ae_filter_length,
+              filter_length=self.ae_hop_length,
               stride=self.ae_hop_length,
               name='ae_stridedconv_%d' % (num_layer + 1))
 
@@ -206,12 +216,12 @@ class MusTGAN(object):
               de,
               causal=False,
               num_filters=self.ae_width,
-              filter_length=self.ae_filter_length,
+              filter_length=self.ae_hop_length,
               stride=self.ae_hop_length,
               name='ae_stridedconv_%d' % (i + 1))
 
         dilation = 2 ** (self.ae_num_stages - (i % self.ae_num_stages) - 1)
-        d = tf.nn.relu(de)
+        d = self.leakly_relu(de)
         d = masked.deconv1d(
             d,
             causal=False,
@@ -219,7 +229,7 @@ class MusTGAN(object):
             filter_length=self.ae_filter_length,
             dilation=dilation,
             name='ae_dilateddeconv_%d' % (i + 1))
-        d = tf.nn.relu(d)
+        d = self.leakly_relu(d)
         de += masked.conv1d(
             d,
             num_filters=self.ae_width,
@@ -232,6 +242,7 @@ class MusTGAN(object):
           num_filters=1,
           filter_length=self.ae_filter_length,
           name='ge')
+      ge = tf.tanh(ge)
       ge = tf.squeeze(ge, [2])
       tf.logging.info('final ge shape: %s' % str(ge.shape.as_list()))
 
@@ -272,8 +283,7 @@ class MusTGAN(object):
             # build the model graph
             mu_law_input_wav = self.mu_law(input_wav)
             en = self.f(mu_law_input_wav, reuse=reuse) # (batch_size, 48, ae_bottleneck=16)
-            net = masked.pool1d(en, 16, name='pretrain_pool', mode='max')
-            net = tf.reshape(net, [self.batch_size, -1])
+            net = tf.reshape(en, [self.batch_size, -1])
 
             with tf.variable_scope('pretrain_fc', reuse=reuse):
               net = tf.layers.dense(inputs=net, units=512, activation=None)

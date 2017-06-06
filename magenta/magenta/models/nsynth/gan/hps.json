@@ -26,5 +26,6 @@
   "alpha": 30.0,
   "beta": 5.0,
   "g_train_iter_per_step": 5,
-  "d_train_iter_per_step": 1
+  "d_train_iter_per_step": 1,
+  "ae_num_layers": 20
 }
