@@ -7,7 +7,7 @@ slim = tf.contrib.slim
 x_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits
 
 class MusTGAN(object):
-  def __init__(self, batch_size, num_gpus):
+  def __init__(self, batch_size, num_gpus, d_lr_schedule=None, g_lr_schedule=None):
     self.pretrain_lr_schedule = {
         0: 3e-4,
         2500: 1e-4,
@@ -18,31 +18,52 @@ class MusTGAN(object):
         60000: 6e-6,
         80000: 2e-6,
     }
+
     # TODO: learning rate tuning
-    self.d_lr_schedule = {
-        0: 3e-4,
-        2500: 1e-4,
-        5000: 6e-5,
-        10000: 4e-5,
-        20000: 2e-5,
-        40000: 1e-5,
-        60000: 6e-6,
-        80000: 2e-6,
-    }
-    self.g_lr_schedule = {
-        0: 3e-4,
-        1250: 2e-4,
-        2500: 1e-4,
-        3750: 8e-5,
-        5000: 5e-5,
-        7500: 3e-5,
-        10000: 2e-5,
-        15000: 8e-6,
-        20000: 5e-6,
-        40000: 3e-6,
-        60000: 2e-6,
-        80000: 1e-6,
-    }
+    if d_lr_schedule:
+      tf.logging.info("Using custom d_lr_schedule to train the model.")
+      assert isinstance(d_lr_schedule, dict)
+      for k, v in d_lr_schedule.iteritems():
+        assert isinstance(k, int)
+        assert isinstance(v, float)
+      self.d_lr_schedule = d_lr_schedule
+    else:
+      tf.logging.info("Using default d_lr_schedule to train the model.")
+      self.d_lr_schedule = {
+          0: 3e-4,
+          2500: 1e-4,
+          5000: 6e-5,
+          10000: 4e-5,
+          20000: 2e-5,
+          40000: 1e-5,
+          60000: 6e-6,
+          80000: 2e-6,
+      }
+
+    if g_lr_schedule:
+      tf.logging.info("Using custom g_lr_schedule to train the model.")
+      assert isinstance(g_lr_schedule, dict)
+      for k, v in g_lr_schedule.iteritems():
+        assert isinstance(k, int)
+        assert isinstance(v, float)
+      self.g_lr_schedule = g_lr_schedule
+    else:
+      tf.logging.info("Using default g_lr_schedule to train the model.")
+      self.g_lr_schedule = {
+          0: 3e-4,
+          1250: 2e-4,
+          2500: 1e-4,
+          3750: 8e-5,
+          5000: 5e-5,
+          7500: 3e-5,
+          10000: 2e-5,
+          15000: 8e-6,
+          20000: 5e-6,
+          40000: 3e-6,
+          60000: 2e-6,
+          80000: 1e-6,
+      }
+
     self.num_stages = 10
     self.filter_length = 3
     self.ae_num_stages = 10

@@ -1,3 +1,4 @@
+import json
 import tensorflow as tf
 from model import MusTGAN
 from solver import Solver
@@ -28,6 +29,10 @@ tf.app.flags.DEFINE_boolean("from_scratch", False,
                             "Start (pre)training from scratch.")
 tf.app.flags.DEFINE_integer("ckpt_id", None,
                             "Checkpoint id, e.g. 500")
+tf.app.flags.DEFINE_string("d_lr_schedule", None,
+                           "External file for the d_lr_schedule hyperparameter.")
+tf.app.flags.DEFINE_string("g_lr_schedule", None,
+                           "External file for the g_lr_schedule hyperparameter.")
 
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
@@ -45,6 +50,15 @@ tf.app.flags.DEFINE_string("log", "INFO",
 tf.app.flags.DEFINE_integer("sample_length", 61440, "Sample length for cropping.")
 tf.app.flags.DEFINE_integer("sample_rate", 16000, "Samples per second.")
 
+
+def parse_schedule_file(filename):
+  with open(filename, 'r') as f:
+    schedule_json = json.load(f)
+    ret_dict = {}
+    for k, v in schedule_json.iteritems():
+      ret_dict[int(k)] = v
+    return ret_dict
+
 def main(unused_argv=None):
   tf.logging.set_verbosity(FLAGS.log)
   assert FLAGS.mode is not None
@@ -53,7 +67,10 @@ def main(unused_argv=None):
   assert total_batch_size % FLAGS.num_gpus == 0
   per_gpu_batch_size = total_batch_size / FLAGS.num_gpus
 
-  model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
+  d_lr_schedule = parse_schedule_file(FLAGS.d_lr_schedule) if FLAGS.d_lr_schedule else None
+  g_lr_schedule = parse_schedule_file(FLAGS.g_lr_schedule) if FLAGS.g_lr_schedule else None
+
+  model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus, d_lr_schedule=d_lr_schedule, g_lr_schedule=g_lr_schedule)
   solver = Solver(model, FLAGS)
 
   if FLAGS.mode == "pretrain":
