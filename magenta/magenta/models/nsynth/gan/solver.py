@@ -203,7 +203,7 @@ class Solver(object):
             pretrain_ckpt_path = tf.train.latest_checkpoint(FLAGS.pretrain_path)
             restorer = tf.train.Saver(model["restore_from_pretrain_vars"])
             restorer.restore(sess, pretrain_ckpt_path)
-            tf.logging.info("Complete restoring pretrained parameters (variable scope f) from %s" % ckpt_path)
+            tf.logging.info("Complete restoring pretrained parameters (variable scope f) from %s" % pretrain_ckpt_path)
         else:
           variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
           restorer = tf.train.Saver(variables_to_restore)
@@ -238,31 +238,36 @@ class Solver(object):
           # updage global_step explicitly
           sess.run(model["global_step_inc"])
 
-          # train d and g
-          for _ in xrange(d_train_iter_per_step):
-            sess.run(model["d_train_op"])
-
-          for _ in xrange(g_train_iter_per_step):
-            sess.run(model["g_train_op"])
-
-          # train f periodically
-          if step % f_train_period == 0:
-            sess.run(model["f_train_op"])
-
-          # logging loss info
           if (step + 1) % FLAGS.log_period == 0:
+            # train d and g
+            for _ in xrange(d_train_iter_per_step):
+              dl, _ = sess.run(model["d_loss"], model["d_train_op"])
+
+            for _ in xrange(g_train_iter_per_step):
+              gl, _ = sess.run(model["g_loss"], model["g_train_op"])
+
+            # train f periodically
+            if step % f_train_period == 0:
+              fl, _ = sess.run(model["f_loss"], model["f_train_op"])
+
             duration = time.time() - start_time
-            dl, gl, fl = sess.run([
-                model["d_loss"],
-                model["g_loss"],
-                model["f_loss"]])
+            start_time = time.time()
             tf.logging.info("step: %d, d_loss: %.6f, " \
                 "g_loss: %.6f, f_loss: %.6f, step/sec: %.3f"
-                % (step, dl, gl, fl, FLAGS.log_period / duration))
-            start_time = time.time()
+                % (step + 1, dl, gl, fl, FLAGS.log_period / duration))
 
+          else:
+            # train d and g
+            for _ in xrange(d_train_iter_per_step):
+              sess.run(model["d_train_op"])
 
-    return
+            for _ in xrange(g_train_iter_per_step):
+              sess.run(model["g_train_op"])
+
+            # train f periodically
+            if step % f_train_period == 0:
+              sess.run(model["f_train_op"])
+
 
   def eval(self):
     FLAGS = self.FLAGS
