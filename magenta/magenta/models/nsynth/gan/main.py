@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_integer("num_gpus", 1,
 
 tf.app.flags.DEFINE_string("wav_path", None,
                            "Path of wav files for pretraining.")
-tf.app.flags.DEFINE_string("eval_wav_path", None, 
+tf.app.flags.DEFINE_string("eval_wav_path", None,
                            "Path of wav files for eval.")
 tf.app.flags.DEFINE_string("src_wav_path", None,
                            "Path of src domain wav files for GAN training.")
@@ -42,7 +42,7 @@ tf.app.flags.DEFINE_string("log", "INFO",
                            "The threshold for what messages will be logged."
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
 
-tf.app.flags.DEFINE_integer("sample_length", 61440, "Sample length.") 
+tf.app.flags.DEFINE_integer("sample_length", 61440, "Sample length.")
 tf.app.flags.DEFINE_integer("batch_size", 1, "batch size for eval")
 tf.app.flags.DEFINE_integer("sample_rate", 16000, "Sample length.")
 

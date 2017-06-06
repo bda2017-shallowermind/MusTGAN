@@ -1,12 +1,14 @@
-import tensorflow as tf
-import os
 import glob
-from datetime import datetime
-import time
 import librosa
-from magenta.models.nsynth import utils
 import ntpath
 import numpy as np
+import os
+import tensorflow as tf
+import time
+
+from datetime import datetime
+from magenta.models.nsynth import utils
+
 
 class Solver(object):
 
@@ -246,7 +248,7 @@ class Solver(object):
     num_gpus = self.model.num_gpus
     sample_length = FLAGS.sample_length
     batch_size = FLAGS.batch_size
-    
+
     if FLAGS.ckpt_id: #checkpoint_path:
       checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-" + FLAGS.ckpt_id)
     else:
@@ -277,7 +279,7 @@ class Solver(object):
       batch_size = FLAGS.batch_size
       wav_placeholder = tf.placeholder(
           tf.float32, shape=[batch_size, sample_length])
-      
+
       model = self.model.build_eval_model(wav_placeholder)
 
       with tf.Session(config=self.sess_config) as sess:
@@ -297,13 +299,13 @@ class Solver(object):
           os.path.join(wavdir, fname) for fname in tf.gfile.ListDirectory(wavdir)
           if is_wav(fname)
         ])
-    
+
         def get_fnames(files):
           fnames_list = []
           for f in files:
             fnames_list.append(ntpath.basename(f))
           return fnames_list
-        
+
         tf.logging.info("wavfiles %d", len(wavfiles))
 
         for start_file in xrange(0, len(wavfiles), batch_size):
@@ -320,8 +322,8 @@ class Solver(object):
           wavdatas = np.array([utils.load_wav(f)[:sample_length] for f in files])
 
           # transfer music
-          decoded_wavs = sess.run(model['decoding'], 
-                              feed_dict={wav_placeholder: wavdatas})  
+          decoded_wavs = sess.run(model['decoding'],
+                              feed_dict={wav_placeholder: wavdatas})
           transferred_wav = utils.inv_mu_law(decoded_wavs - 128)
 
           def write_wav(waveform, sample_rate, pathname, wavfile_name):
@@ -334,8 +336,8 @@ class Solver(object):
           tf.logging.info("wavdatas %d", len(wavdatas))
           tf.logging.info("wavfile_names %d", len(wavfile_names))
           tf.logging.info("transferred_wav %s", str(transferred_wav.shape.as_list()))
-          
+
           for wav_file, filename in zip(transferred_wav.eval(), wavfile_names):
             write_wav(wav_file, FLAGS.sample_rate, FLAGS.transferred_save_path, filename)
-    
+
     return
