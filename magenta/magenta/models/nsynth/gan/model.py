@@ -8,7 +8,38 @@ x_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits
 
 class MusTGAN(object):
   def __init__(self, batch_size, num_gpus):
-    self.learning_rate_schedule = {
+    self.pretrain_lr_schedule = {
+        0: 3e-4,
+        2500: 1e-4,
+        5000: 6e-5,
+        10000: 4e-5,
+        20000: 2e-5,
+        40000: 1e-5,
+        60000: 6e-6,
+        80000: 2e-6,
+    }
+    # TODO: learning rate tuning
+    self.d_lr_schedule = {
+        0: 3e-4,
+        2500: 1e-4,
+        5000: 6e-5,
+        10000: 4e-5,
+        20000: 2e-5,
+        40000: 1e-5,
+        60000: 6e-6,
+        80000: 2e-6,
+    }
+    self.g_lr_schedule = {
+        0: 3e-4,
+        2500: 1e-4,
+        5000: 6e-5,
+        10000: 4e-5,
+        20000: 2e-5,
+        40000: 1e-5,
+        60000: 6e-6,
+        80000: 2e-6,
+    }
+    self.f_lr_schedule = {
         0: 3e-4,
         2500: 1e-4,
         5000: 6e-5,
@@ -43,6 +74,15 @@ class MusTGAN(object):
     out = tf.sign(x) / mu * ((1 + mu)**tf.abs(out) - 1)
     out = tf.where(tf.equal(x, 0), x, out)
     return out
+
+  def lr_schedule(self, step, schedule):
+    lr = tf.constant(schedule[0])
+    for key, value in schedule.iteritems():
+      lr = tf.cond(
+          tf.less(step, key),
+          lambda: lr,
+          lambda: tf.constant(value))
+    return lr
 
   def f(self, x, reuse):
     with tf.variable_scope('f', reuse=reuse):
@@ -169,12 +209,7 @@ class MusTGAN(object):
     with tf.device('/cpu:0'):
       global_step = tf.train.get_or_create_global_step()
 
-      lr = tf.constant(self.learning_rate_schedule[0])
-      for key, value in self.learning_rate_schedule.iteritems():
-        lr = tf.cond(
-            tf.less(global_step, key),
-            lambda: lr,
-            lambda: tf.constant(value))
+      lr = self.lr_schedule(global_step, self.pretrain_lr_schedule)
 
       losses = []
       accuracies = []
@@ -229,10 +264,10 @@ class MusTGAN(object):
       train_op = tf.group(maintain_averages_op)
 
     return {
-      'global_step': global_step,
-      'loss': avg_loss,
-      'train_op': train_op,
-      'accuracy': avg_accuracy,
+        'global_step': global_step,
+        'loss': avg_loss,
+        'train_op': train_op,
+        'accuracy': avg_accuracy,
     }
 
   def build_train_model(self, src_wavs, trg_wavs):
@@ -240,14 +275,32 @@ class MusTGAN(object):
     assert len(trg_wavs) == self.num_gpus
 
     with tf.device('/cpu:0'):
-      global_step = tf.contrib.framework.get_or_create_global_step()
+      global_step = tf.train.get_or_create_global_step()
+      d_step = tf.get_variable(
+          'd_step',
+          shape=[],
+          dtype=tf.int64,
+          initializer=tf.zeros_initializer(),
+          trainable=False,
+          collections=[tf.GraphKeys.GLOBAL_VARIABLES])
+      g_step = tf.get_variable(
+          'g_step',
+          shape=[],
+          dtype=tf.int64,
+          initializer=tf.zeros_initializer(),
+          trainable=False,
+          collections=[tf.GraphKeys.GLOBAL_VARIABLES])
+      f_step = tf.get_variable(
+          'f_step',
+          shape=[],
+          dtype=tf.int64,
+          initializer=tf.zeros_initializer(),
+          trainable=False,
+          collections=[tf.GraphKeys.GLOBAL_VARIABLES])
 
-      lr = tf.constant(self.learning_rate_schedule[0])
-      for key, value in self.learning_rate_schedule.iteritems():
-        lr = tf.cond(
-            tf.less(global_step, key),
-            lambda: lr,
-            lambda: tf.constant(value))
+      d_lr = self.lr_schedule(d_step, self.d_lr_schedule)
+      g_lr = self.lr_schedule(g_step, self.g_lr_schedule)
+      f_lr = self.lr_schedule(f_step, self.f_lr_schedule)
 
       d_losses = []
       g_losses = []
@@ -301,33 +354,36 @@ class MusTGAN(object):
       g_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='g')
       f_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='f')
 
-      ema = tf.train.ExponentialMovingAverage(
-          decay=0.9999, num_updates=global_step)
+      d_ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=d_step)
+      g_ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=g_step)
+      f_ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=f_step)
 
-    d_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
-    g_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
-    f_opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
+    d_opt = tf.train.AdamOptimizer(d_lr, epsilon=1e-8)
+    g_opt = tf.train.AdamOptimizer(g_lr, epsilon=1e-8)
+    f_opt = tf.train.AdamOptimizer(f_lr, epsilon=1e-8)
 
     d_opt_op = d_opt.minimize(
         d_loss,
-        global_step=global_step,
+        global_step=d_step,
         var_list=d_vars,
         colocate_gradients_with_ops=True)
     g_opt_op = g_opt.minimize(
         g_loss,
-        global_step=global_step,
+        global_step=g_step,
         var_list=g_vars,
         colocate_gradients_with_ops=True)
     f_opt_op = f_opt.minimize(
         f_loss,
-        global_step=global_step,
+        global_step=f_step,
         var_list=f_vars,
         colocate_gradients_with_ops=True)
 
-
-    maintain_averages_d_op = ema.apply(d_vars)
-    maintain_averages_g_op = ema.apply(g_vars)
-    maintain_averages_f_op = ema.apply(f_vars)
+    maintain_averages_d_op = d_ema.apply(d_vars)
+    maintain_averages_g_op = g_ema.apply(g_vars)
+    maintain_averages_f_op = f_ema.apply(f_vars)
 
     with tf.control_dependencies([d_opt_op]):
       d_train_op = tf.group(maintain_averages_d_op)
@@ -336,13 +392,22 @@ class MusTGAN(object):
     with tf.control_dependencies([f_opt_op]):
       f_train_op = tf.group(maintain_averages_f_op)
 
+    global_step_inc = tf.assign_add(global_step, 1)
+
+    restore_from_pretrain_vars = {}
+    for var in f_vars:
+      restore_from_pretrain_vars[f_ema.average_name(var)] = var
+
     return {
-      'd_loss': d_loss,
-      'g_loss': g_loss,
-      'f_loss': f_loss,
-      'd_train_op': d_train_op,
-      'g_train_op': g_train_op,
-      'f_train_op': f_train_op,
+        'global_step': global_step,
+        'global_step_inc': global_step_inc,
+        'd_loss': d_loss,
+        'g_loss': g_loss,
+        'f_loss': f_loss,
+        'd_train_op': d_train_op,
+        'g_train_op': g_train_op,
+        'f_train_op': f_train_op,
+        'restore_from_pretrain_vars': restore_from_pretrain_vars,
     }
 
   def build_eval_model(self, input_wavs):
