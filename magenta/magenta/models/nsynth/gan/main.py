@@ -28,6 +28,8 @@ tf.app.flags.DEFINE_boolean("from_scratch", False,
                             "Start (pre)training from scratch.")
 tf.app.flags.DEFINE_integer("ckpt_id", None,
                             "Checkpoint id, e.g. 500")
+tf.app.flags.DEFINE_string("hps", None,
+                           "External file for specifying hyperparameters.")
 
 tf.app.flags.DEFINE_integer("log_period", 25,
                             "Log the curr loss after every log_period steps.")
@@ -53,7 +55,7 @@ def main(unused_argv=None):
   assert total_batch_size % FLAGS.num_gpus == 0
   per_gpu_batch_size = total_batch_size / FLAGS.num_gpus
 
-  model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus)
+  model = MusTGAN(per_gpu_batch_size, FLAGS.num_gpus, hps_filename=FLAGS.hps)
   solver = Solver(model, FLAGS)
 
   if FLAGS.mode == "pretrain":
