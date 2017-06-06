@@ -222,7 +222,6 @@ class Solver(object):
         tf.logging.info("Start training")
 
 
-        f_train_period = self.model.f_train_period
         d_train_iter_per_step = self.model.d_train_iter_per_step
         g_train_iter_per_step = self.model.g_train_iter_per_step
         start_time = time.time()
@@ -246,16 +245,11 @@ class Solver(object):
             for _ in xrange(g_train_iter_per_step):
               gl, _ = sess.run([model["g_loss"], model["g_train_op"]])
 
-            if step % f_train_period == 0:
-              fl, _ = sess.run([model["f_loss"], model["f_train_op"]])
-            else:
-              fl = sess.run(model["f_loss"])
-
             duration = time.time() - start_time
             start_time = time.time()
             tf.logging.info("step: %d, d_loss: %.6f, " \
-                "g_loss: %.6f, f_loss: %.6f, step/sec: %.3f"
-                % (step + 1, dl, gl, fl, FLAGS.log_period / duration))
+                "g_loss: %.6f, step/sec: %.3f"
+                % (step + 1, dl, gl, FLAGS.log_period / duration))
 
           else:
             # train d and g
@@ -264,10 +258,6 @@ class Solver(object):
 
             for _ in xrange(g_train_iter_per_step):
               sess.run(model["g_train_op"])
-
-            # train f periodically
-            if step % f_train_period == 0:
-              sess.run(model["f_train_op"])
 
 
   def eval(self):
