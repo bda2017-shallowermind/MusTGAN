@@ -39,14 +39,6 @@ class MusTGAN(object):
         60000: 6e-6,
         80000: 2e-6,
     }
-    self.f_lr_schedule = {
-        0: 5e-5,
-        2500: 2e-5,
-        5000: 1e-5,
-        10000: 5e-6,
-        20000: 2e-6,
-        40000: 1e-6,
-    }
     self.num_stages = 10
     self.filter_length = 3
     self.ae_num_stages = 10
@@ -57,10 +49,9 @@ class MusTGAN(object):
     self.ae_hop_length = 2
     self.batch_size = batch_size
     self.num_gpus = num_gpus
-    self.alpha = 15.
-    self.beta = 15.
-    self.f_train_period = 5
-    self.g_train_iter_per_step = 1
+    self.alpha = 30.
+    self.beta = 5.
+    self.g_train_iter_per_step = 5
     self.d_train_iter_per_step = 1
 
   def mu_law(self, x, mu=255):
@@ -287,21 +278,12 @@ class MusTGAN(object):
           initializer=tf.zeros_initializer(),
           trainable=False,
           collections=[tf.GraphKeys.GLOBAL_VARIABLES])
-      f_step = tf.get_variable(
-          'f_step',
-          shape=[],
-          dtype=tf.int64,
-          initializer=tf.zeros_initializer(),
-          trainable=False,
-          collections=[tf.GraphKeys.GLOBAL_VARIABLES])
 
       d_lr = self.lr_schedule(d_step, self.d_lr_schedule)
       g_lr = self.lr_schedule(g_step, self.g_lr_schedule)
-      f_lr = self.lr_schedule(f_step, self.f_lr_schedule)
 
       d_losses = []
       g_losses = []
-      f_losses = []
       for i in range(self.num_gpus):
         src_wav = src_wavs[i]
         trg_wav = trg_wavs[i]
@@ -336,17 +318,14 @@ class MusTGAN(object):
             trg_tid_loss = tf.reduce_mean(tf.square(trg_x - trg_gfx)) * self.beta
 
             d_loss = src_dis_loss + trg_dis_loss + trg_real_dis_loss
-            g_loss = src_gen_loss + trg_gen_loss + trg_tid_loss
-            f_loss = src_const_loss
+            g_loss = src_gen_loss + trg_gen_loss + trg_tid_loss + src_const_loss
 
             d_losses.append(d_loss)
             g_losses.append(g_loss)
-            f_losses.append(f_loss)
 
 
       d_loss = tf.reduce_mean(d_losses)
       g_loss = tf.reduce_mean(g_losses)
-      f_loss = tf.reduce_mean(f_losses)
       d_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
       g_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='g')
       f_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='f')
@@ -356,11 +335,10 @@ class MusTGAN(object):
       g_ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=g_step)
       f_ema = tf.train.ExponentialMovingAverage(
-          decay=0.9999, num_updates=f_step)
+          decay=0.9999, num_updates=g_step)
 
     d_opt = tf.train.AdamOptimizer(d_lr, epsilon=1e-8)
     g_opt = tf.train.AdamOptimizer(g_lr, epsilon=1e-8)
-    f_opt = tf.train.AdamOptimizer(f_lr, epsilon=1e-8)
 
     d_opt_op = d_opt.minimize(
         d_loss,
@@ -372,22 +350,14 @@ class MusTGAN(object):
         global_step=g_step,
         var_list=g_vars,
         colocate_gradients_with_ops=True)
-    f_opt_op = f_opt.minimize(
-        f_loss,
-        global_step=f_step,
-        var_list=f_vars,
-        colocate_gradients_with_ops=True)
 
     maintain_averages_d_op = d_ema.apply(d_vars)
     maintain_averages_g_op = g_ema.apply(g_vars)
-    maintain_averages_f_op = f_ema.apply(f_vars)
 
     with tf.control_dependencies([d_opt_op]):
       d_train_op = tf.group(maintain_averages_d_op)
     with tf.control_dependencies([g_opt_op]):
       g_train_op = tf.group(maintain_averages_g_op)
-    with tf.control_dependencies([f_opt_op]):
-      f_train_op = tf.group(maintain_averages_f_op)
 
     global_step_inc = tf.assign_add(global_step, 1)
 
@@ -400,10 +370,8 @@ class MusTGAN(object):
         'global_step_inc': global_step_inc,
         'd_loss': d_loss,
         'g_loss': g_loss,
-        'f_loss': f_loss,
         'd_train_op': d_train_op,
         'g_train_op': g_train_op,
-        'f_train_op': f_train_op,
         'restore_from_pretrain_vars': restore_from_pretrain_vars,
     }
 
