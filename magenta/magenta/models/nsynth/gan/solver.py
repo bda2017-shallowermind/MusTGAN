@@ -241,14 +241,15 @@ class Solver(object):
           if (step + 1) % FLAGS.log_period == 0:
             # train d and g
             for _ in xrange(d_train_iter_per_step):
-              dl, _ = sess.run(model["d_loss"], model["d_train_op"])
+              dl, _ = sess.run([model["d_loss"], model["d_train_op"]])
 
             for _ in xrange(g_train_iter_per_step):
-              gl, _ = sess.run(model["g_loss"], model["g_train_op"])
+              gl, _ = sess.run([model["g_loss"], model["g_train_op"]])
 
-            # train f periodically
             if step % f_train_period == 0:
-              fl, _ = sess.run(model["f_loss"], model["f_train_op"])
+              fl, _ = sess.run([model["f_loss"], model["f_train_op"]])
+            else:
+              fl = sess.run(model["f_loss"])
 
             duration = time.time() - start_time
             start_time = time.time()
