@@ -245,9 +245,8 @@ class Solver(object):
 
   def eval(self):
     FLAGS = self.FLAGS
-    num_gpus = self.model.num_gpus
     sample_length = FLAGS.sample_length
-    batch_size = FLAGS.batch_size
+    batch_size = FLAGS.total_batch_size
 
     if FLAGS.ckpt_id > 0: #checkpoint_path:
       checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-%d" % FLAGS.ckpt_id)
@@ -276,7 +275,6 @@ class Solver(object):
     with tf.Graph().as_default() as graph:
       # build model
       sample_length = FLAGS.sample_length
-      batch_size = FLAGS.batch_size
       wav_placeholder = tf.placeholder(
           tf.float32, shape=[batch_size, sample_length])
 
