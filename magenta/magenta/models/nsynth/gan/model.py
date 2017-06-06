@@ -20,34 +20,32 @@ class MusTGAN(object):
     }
     # TODO: learning rate tuning
     self.d_lr_schedule = {
-        0: 3e-4,
-        2500: 1e-4,
-        5000: 6e-5,
-        10000: 4e-5,
-        20000: 2e-5,
+        0: 5e-4,
+        2500: 2e-4,
+        5000: 8e-5,
+        10000: 5e-5,
+        20000: 3e-5,
         40000: 1e-5,
         60000: 6e-6,
         80000: 2e-6,
     }
     self.g_lr_schedule = {
-        0: 3e-4,
-        2500: 1e-4,
-        5000: 6e-5,
-        10000: 4e-5,
-        20000: 2e-5,
+        0: 5e-4,
+        2500: 2e-4,
+        5000: 8e-5,
+        10000: 5e-5,
+        20000: 3e-5,
         40000: 1e-5,
         60000: 6e-6,
         80000: 2e-6,
     }
     self.f_lr_schedule = {
-        0: 3e-4,
-        2500: 1e-4,
-        5000: 6e-5,
-        10000: 4e-5,
-        20000: 2e-5,
-        40000: 1e-5,
-        60000: 6e-6,
-        80000: 2e-6,
+        0: 5e-5,
+        2500: 2e-5,
+        5000: 1e-5,
+        10000: 5e-6,
+        20000: 2e-6,
+        40000: 1e-6,
     }
     self.num_stages = 10
     self.filter_length = 3
@@ -58,11 +56,10 @@ class MusTGAN(object):
     self.ae_bottleneck_width = 16
     self.ae_hop_length = 2
     self.batch_size = batch_size
-    self.tv_const = 1e-6
     self.num_gpus = num_gpus
     self.alpha = 15.
     self.beta = 15.
-    self.f_train_period = 15
+    self.f_train_period = 5
     self.g_train_iter_per_step = 1
     self.d_train_iter_per_step = 1
 
