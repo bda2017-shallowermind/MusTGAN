@@ -216,8 +216,7 @@ class Solver(object):
         summary_writer = tf.summary.FileWriter(
             logdir=FLAGS.train_path,
             graph=sess.graph)
-        tf.train.write_graph(sess.graph, FLAGS.train_path,
-            "graph.pbtxt", as_text=True)
+        #tf.train.write_graph(sess.graph, FLAGS.train_path, "graph.pbtxt", as_text=True)
         saver = tf.train.Saver()
         tf.logging.info("Start training")
 

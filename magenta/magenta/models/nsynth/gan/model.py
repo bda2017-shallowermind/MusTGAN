@@ -334,6 +334,8 @@ class MusTGAN(object):
           decay=0.9999, num_updates=d_step)
       g_ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=g_step)
+      f_ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=g_step)
 
     d_opt = tf.train.AdamOptimizer(d_lr, epsilon=1e-8)
     g_opt = tf.train.AdamOptimizer(g_lr, epsilon=1e-8)
