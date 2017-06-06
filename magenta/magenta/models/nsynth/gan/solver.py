@@ -100,10 +100,10 @@ class Solver(object):
 
         ckpt_path = None
         if not FLAGS.from_scratch:
-          if FLAGS.ckpt_id is None:
+          if FLAGS.ckpt_id < 1:
             ckpt_path = tf.train.latest_checkpoint(FLAGS.pretrain_path)
           else:
-            ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-" + FLAGS.ckpt_id)
+            ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-%d" % FLAGS.ckpt_id)
 
         if ckpt_path is None:
           tf.logging.info("Skip loading checkpoint, start training from scartch...")
@@ -249,12 +249,12 @@ class Solver(object):
     sample_length = FLAGS.sample_length
     batch_size = FLAGS.batch_size
 
-    if FLAGS.ckpt_id: #checkpoint_path:
-      checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-" + FLAGS.ckpt_id)
+    if FLAGS.ckpt_id > 0: #checkpoint_path:
+      checkpoint_path = os.path.join(FLAGS.train_path, "model.ckpt-%d" % FLAGS.ckpt_id)
     else:
       tf.logging.info("Will load latest checkpoint from %s.", FLAGS.train_path)
       while not tf.gfile.Exists(FLAGS.train_path):
-        tf.logging.fatal("\tTrained model save dir '%s' does not exist!", expdir)
+        tf.logging.fatal("\tTrained model save dir '%s' does not exist!", FLAGS.train_path)
         sys.exit(1)
 
       try:
