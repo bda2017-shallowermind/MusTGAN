@@ -138,7 +138,6 @@ class Solver(object):
             sess.run(model["train_op"])
 
 
-
   def train(self):
     FLAGS = self.FLAGS
     num_gpus = self.model.num_gpus
@@ -180,15 +179,31 @@ class Solver(object):
       with tf.Session(config=self.sess_config) as sess:
         global_init = tf.global_variables_initializer()
         sess.run(global_init)
-
-        # TODO: load pretrained f
-        if FLAGS.from_scratch == False:
-          variables_to_restore = slim.get_model_variables(scpoe='f')
-          pass
-        # TODO: load trained whole model
-        else:
-          pass
         tf.logging.info("Finished initialization")
+
+        ckpt_path = None
+        if not FLAGS.from_scratch:
+          if FLAGS.ckpt_id is None:
+            ckpt_path = tf.train.latest_checkpoint(FLAGS.train_path)
+          else:
+            ckpt_path = os.path.join(FLAGS.train_path, "model.ckpt-" + FLAGS.ckpt_id)
+
+        if ckpt_path is None:
+          tf.logging.info("Skip loading checkpoint, start training from scartch...")
+          if FLAGS.pretrain_path is None:
+            tf.logging.warning("pretrain_path is not specified, start from random f parameters")
+          else:
+            pretrain_ckpt_path = tf.train.latest_checkpoint(FLAGS.pretrain_path)
+            restorer = tf.train.Saver(model["restore_from_pretrain_vars"])
+            restorer.restore(sess, pretrain_ckpt_path)
+            tf.logging.info("Complete restoring pretrained parameters (variable scope f) from %s" % ckpt_path)
+        else:
+          variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+          restorer = tf.train.Saver(variables_to_restore)
+          restorer.restore(sess, ckpt_path)
+          tf.logging.info("Complete restoring parameters from %s" % ckpt_path)
+
+        from_step = sess.run(model["global_step"])
 
         tf.train.start_queue_runners(sess=sess)
         summary_writer = tf.summary.FileWriter(
@@ -199,12 +214,23 @@ class Solver(object):
         saver = tf.train.Saver()
         tf.logging.info("Start training")
 
-        start_time = time.time()
+
         f_train_period = self.model.f_train_period
         d_train_iter_per_step = self.model.d_train_iter_per_step
         g_train_iter_per_step = self.model.g_train_iter_per_step
-        # while True:
-        for step in xrange(FLAGS.train_iter):
+        start_time = time.time()
+
+        for step in xrange(from_step, FLAGS.train_iter):
+          if step % FLAGS.ckpt_period == 0:
+            tf.logging.info("Checkpointing model at step %d" % step)
+            saver.save(sess, os.path.join(
+                FLAGS.train_path, 'model.ckpt'), global_step=step)
+            tf.logging.info("Finished checkpoint at step %d" % step)
+            start_time = time.time()
+
+          # updage global_step explicitly
+          sess.run(model["global_step_inc"])
+
           # train d and g
           for _ in xrange(d_train_iter_per_step):
             sess.run(model["d_train_op"])
@@ -217,7 +243,7 @@ class Solver(object):
             sess.run(model["f_train_op"])
 
           # logging loss info
-          if step > 0 and (step + 1) % FLAGS.log_period == 0:
+          if (step + 1) % FLAGS.log_period == 0:
             duration = time.time() - start_time
             dl, gl, fl = sess.run([
                 model["d_loss"],
@@ -228,12 +254,6 @@ class Solver(object):
                 % (step, dl, gl, fl, FLAGS.log_period / duration))
             start_time = time.time()
 
-          if step > 0 and step % FLAGS.ckpt_period == 0:
-            tf.logging.info("Checkpointing model at step %d" % step)
-            saver.save(sess, os.path.join(
-                FLAGS.train_path, 'model.ckpt'), global_step=step)
-            tf.logging.info("Finished checkpoint at step %d" % step)
-            start_time = time.time()
 
   def eval(self):
     return
