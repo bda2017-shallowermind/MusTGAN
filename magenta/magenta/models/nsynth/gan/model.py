@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import tensorflow as tf
 
@@ -6,8 +7,61 @@ from magenta.models.nsynth.gan import masked
 slim = tf.contrib.slim
 x_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits
 
+def parse_hps_file(hps_filename):
+  with open(hps_filename, "r") as f:
+    j = json.load(f)
+    hps = {}
+
+    if "d_lr_schedule" in j:
+      tf.logging.info("Using custom d_lr_schedule to train the model.")
+      d_lr_schedule = {int(k): float(v) for k, v in j["d_lr_schedule"].iteritems()}
+      hps["d_lr_schedule"] = d_lr_schedule
+    else:
+      tf.logging.info("Using default d_lr_schedule to train the model.")
+
+    if "g_lr_schedule" in j:
+      tf.logging.info("Using custom g_lr_schedule to train the model.")
+      g_lr_schedule = {int(k): float(v) for k, v in j["g_lr_schedule"].iteritems()}
+      hps["g_lr_schedule"] = g_lr_schedule
+    else:
+      tf.logging.info("Using default g_lr_schedule to train the model.")
+
+    if "alpha" in j:
+      assert isinstance(j["alpha"], float)
+      tf.logging.info("Using custom alpha %f to train the model." % j["alpha"])
+      hps["alpha"] = j["alpha"]
+    else:
+      tf.logging.info("Using default alpha to train the model.")
+
+    if "beta" in j:
+      assert isinstance(j["beta"], float)
+      tf.logging.info("Using custom beta %f to train the model." % j["beta"])
+      hps["beta"] = j["beta"]
+    else:
+      tf.logging.info("Using default beta to train the model.")
+
+    if "g_train_iter_per_step" in j:
+      assert isinstance(j["g_train_iter_per_step"], int)
+      tf.logging.info("Using custom g_train_iter_per_step %d to train the model."
+                      % j["g_train_iter_per_step"])
+      hps["g_train_iter_per_step"] = j["g_train_iter_per_step"]
+    else:
+      tf.logging.info("Using default g_train_iter_per_step to train the model.")
+
+    if "d_train_iter_per_step" in j:
+      assert isinstance(j["d_train_iter_per_step"], int)
+      tf.logging.info("Using custom d_train_iter_per_step %d to train the model."
+                      % j["d_train_iter_per_step"])
+      hps["d_train_iter_per_step"] = j["d_train_iter_per_step"]
+    else:
+      tf.logging.info("Using default d_train_iter_per_step to train the model.")
+
+    return hps
+
 class MusTGAN(object):
-  def __init__(self, batch_size, num_gpus, d_lr_schedule=None, g_lr_schedule=None):
+  def __init__(self, batch_size, num_gpus, hps_filename):
+    hps = parse_hps_file(hps_filename) if hps_filename else {}
+
     self.pretrain_lr_schedule = {
         0: 3e-4,
         2500: 1e-4,
@@ -20,36 +74,18 @@ class MusTGAN(object):
     }
 
     # TODO: learning rate tuning
-    if d_lr_schedule:
-      tf.logging.info("Using custom d_lr_schedule to train the model.")
-      assert isinstance(d_lr_schedule, dict)
-      for k, v in d_lr_schedule.iteritems():
-        assert isinstance(k, int)
-        assert isinstance(v, float)
-      self.d_lr_schedule = d_lr_schedule
-    else:
-      tf.logging.info("Using default d_lr_schedule to train the model.")
-      self.d_lr_schedule = {
-          0: 3e-4,
-          2500: 1e-4,
-          5000: 6e-5,
-          10000: 4e-5,
-          20000: 2e-5,
-          40000: 1e-5,
-          60000: 6e-6,
-          80000: 2e-6,
-      }
+    self.d_lr_schedule = hps.get("d_lr_schedule", {
+        0: 3e-4,
+        2500: 1e-4,
+        5000: 6e-5,
+        10000: 4e-5,
+        20000: 2e-5,
+        40000: 1e-5,
+        60000: 6e-6,
+        80000: 2e-6,
+    })
 
-    if g_lr_schedule:
-      tf.logging.info("Using custom g_lr_schedule to train the model.")
-      assert isinstance(g_lr_schedule, dict)
-      for k, v in g_lr_schedule.iteritems():
-        assert isinstance(k, int)
-        assert isinstance(v, float)
-      self.g_lr_schedule = g_lr_schedule
-    else:
-      tf.logging.info("Using default g_lr_schedule to train the model.")
-      self.g_lr_schedule = {
+    self.g_lr_schedule = hps.get("g_lr_schedule", {
           0: 3e-4,
           1250: 2e-4,
           2500: 1e-4,
@@ -62,7 +98,7 @@ class MusTGAN(object):
           40000: 3e-6,
           60000: 2e-6,
           80000: 1e-6,
-      }
+    })
 
     self.num_stages = 10
     self.filter_length = 3
@@ -74,10 +110,10 @@ class MusTGAN(object):
     self.ae_hop_length = 2
     self.batch_size = batch_size
     self.num_gpus = num_gpus
-    self.alpha = 30.
-    self.beta = 5.
-    self.g_train_iter_per_step = 5
-    self.d_train_iter_per_step = 1
+    self.alpha = hps.get("alpha", 30.)
+    self.beta = hps.get("beta", 5.)
+    self.g_train_iter_per_step = hps.get("g_train_iter_per_step", 5)
+    self.d_train_iter_per_step = hps.get("d_train_iter_per_step", 1)
 
   def mu_law(self, x, mu=255):
     out = tf.sign(x) * tf.log(1 + mu * tf.abs(x)) / np.log(1 + mu)
