@@ -453,8 +453,6 @@ class MusTGAN(object):
         'restore_from_pretrain_vars': restore_from_pretrain_vars,
     }
 
-
-
   def build_eval_model(self, input_wavs):
     reuse = False
     with tf.device('/gpu:0'):
