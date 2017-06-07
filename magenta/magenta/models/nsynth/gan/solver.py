@@ -239,11 +239,12 @@ class Solver(object):
           if (step + 1) % FLAGS.log_period == 0:
             # train d and g
             for _ in xrange(d_train_iter_per_step):
-              dl, src_dis_l, trg_dis_l, trg_real_dis_l, _ =
+              dl, src_dis_l, trg_dis_l, trg_real_dis_l, accuracy, _ =
                   sess.run([model["d_loss"],
                             model["src_dis_loss"],
                             model["trg_dis_loss"],
                             model["trg_real_dis_loss"],
+                            model["avg_accuracy"]
                             model["d_train_op"]])
 
 
@@ -259,8 +260,10 @@ class Solver(object):
             duration = time.time() - start_time
             start_time = time.time()
             tf.logging.info("step: %d, step/sec: %.3f, d_loss %.6f = " \
-                "src_dis_loss %.6f + trg_dis_loss %.6f + trg_real_dis_loss %.6f"
-                % (step + 1, FLAGS.log_period / duration, dl, src_dis_l, trg_dis_l, trg_real_dis_l))
+                "src_dis_loss %.6f + trg_dis_loss %.6f + " \
+                "trg_real_dis_loss %.6f, d_accuracy: %.6f"
+                % (step + 1, FLAGS.log_period / duration, dl,
+                   src_dis_l, trg_dis_l, trg_real_dis_l, accuracy))
             tf.logging.info("g_loss %.6f = src_gen_loss %.6f + trg_gen_loss %.6f +" \
                 "trg_tid_loss %.6f + src_const_loss %.6f"
                 % (gl, src_gen_l, trg_gen_l, trg_tid_l, src_const_l))

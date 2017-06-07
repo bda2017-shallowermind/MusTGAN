@@ -355,6 +355,7 @@ class MusTGAN(object):
 
       d_losses = []
       g_losses = []
+      accuracies = []
       for i in range(self.num_gpus):
         src_wav = src_wavs[i]
         trg_wav = trg_wavs[i]
@@ -394,6 +395,17 @@ class MusTGAN(object):
             d_losses.append(d_loss)
             g_losses.append(g_loss)
 
+            src_dis_correct_pred = tf.equal(tf.argmax(src_dgfx, 1), zero_labels)
+            src_dis_accuracy = tf.reduce_mean(tf.cast(src_dis_correct_pred, tf.float32))
+            trg_dis_correct_pred = tf.equal(tf.argmax(trg_dgfx, 1), one_labels)
+            trg_dis_accuracy = tf.reduce_mean(tf.cast(trg_dis_correct_pred, tf.float32))
+            trg_real_dis_correct_pred = tf.equal(tf.argmax(trg_dx, 1), two_labels)
+            trg_real_dis_accuracy = tf.reduce_mean(tf.cast(trg_real_dis_correct_pred, tf.float32))
+
+            # NOTE: assumes all inputs have the same batch size
+            accuracy = tf.reduce_mean([src_dis_accuracy, trg_dis_accuracy, trg_real_dis_accuracy])
+            accuracies.append(accuracy)
+
 
       d_loss = tf.reduce_mean(d_losses)
       g_loss = tf.reduce_mean(g_losses)
@@ -407,6 +419,8 @@ class MusTGAN(object):
           decay=0.9999, num_updates=g_step)
       f_ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=g_step)
+
+      avg_accuracy = tf.reduce_mean(accuracies)
 
     d_opt = tf.train.AdamOptimizer(d_lr, epsilon=1e-8)
     g_opt = tf.train.AdamOptimizer(g_lr, epsilon=1e-8)
@@ -451,6 +465,7 @@ class MusTGAN(object):
         'd_train_op': d_train_op,
         'g_train_op': g_train_op,
         'restore_from_pretrain_vars': restore_from_pretrain_vars,
+        'avg_accuracy': avg_accuracy,
     }
 
 
