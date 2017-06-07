@@ -363,9 +363,9 @@ class MusTGAN(object):
 
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('gpu_name_scope_%d' % i):
-            zero_labels = tf.fill([self.batch_size], 0)
-            one_labels = tf.fill([self.batch_size], 1)
-            two_labels = tf.fill([self.batch_size], 2)
+            zero_labels = tf.cast(tf.fill([self.batch_size], 0), tf.int64)
+            one_labels = tf.cast(tf.fill([self.batch_size], 1), tf.int64)
+            two_labels = tf.cast(tf.fill([self.batch_size], 2), tf.int64)
 
             src_x    = self.mu_law(src_wav)
             src_fx   = self.f(src_x, reuse)

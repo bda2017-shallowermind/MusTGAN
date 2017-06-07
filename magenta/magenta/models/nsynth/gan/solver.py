@@ -239,7 +239,7 @@ class Solver(object):
           if (step + 1) % FLAGS.log_period == 0:
             # train d and g
             for _ in xrange(d_train_iter_per_step):
-              dl, src_dis_l, trg_dis_l, trg_real_dis_l, accuracy, _ =
+              dl, src_dis_l, trg_dis_l, trg_real_dis_l, accuracy, _ = \
                   sess.run([model["d_loss"],
                             model["src_dis_loss"],
                             model["trg_dis_loss"],
@@ -249,7 +249,7 @@ class Solver(object):
 
 
             for _ in xrange(g_train_iter_per_step):
-              gl, src_gen_l, trg_gen_l, trg_tid_l, src_const_l, _ =
+              gl, src_gen_l, trg_gen_l, trg_tid_l, src_const_l, _ = \
                   sess.run([model["g_loss"],
                             model["src_gen_loss"],
                             model["trg_gen_loss"],
