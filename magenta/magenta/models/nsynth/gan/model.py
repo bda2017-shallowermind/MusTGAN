@@ -468,8 +468,6 @@ class MusTGAN(object):
         'avg_accuracy': avg_accuracy,
     }
 
-
-
   def build_eval_model(self, input_wavs):
     reuse = False
     with tf.device('/gpu:0'):
