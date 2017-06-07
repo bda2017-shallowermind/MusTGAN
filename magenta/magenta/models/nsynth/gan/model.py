@@ -440,11 +440,20 @@ class MusTGAN(object):
         'global_step': global_step,
         'global_step_inc': global_step_inc,
         'd_loss': d_loss,
+        'src_dis_loss': src_dis_loss,
+        'trg_dis_loss': trg_dis_loss,
+        'trg_real_dis_loss': trg_real_dis_loss,
         'g_loss': g_loss,
+        'src_gen_loss': src_gen_loss,
+        'trg_gen_loss': trg_gen_loss,
+        'trg_tid_loss': trg_tid_loss,
+        'src_const_loss': src_const_loss,
         'd_train_op': d_train_op,
         'g_train_op': g_train_op,
         'restore_from_pretrain_vars': restore_from_pretrain_vars,
     }
+
+
 
   def build_eval_model(self, input_wavs):
     reuse = False

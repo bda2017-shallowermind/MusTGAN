@@ -239,16 +239,31 @@ class Solver(object):
           if (step + 1) % FLAGS.log_period == 0:
             # train d and g
             for _ in xrange(d_train_iter_per_step):
-              dl, _ = sess.run([model["d_loss"], model["d_train_op"]])
+              dl, src_dis_l, trg_dis_l, trg_real_dis_l, _ =
+                  sess.run([model["d_loss"],
+                            model["src_dis_loss"],
+                            model["trg_dis_loss"],
+                            model["trg_real_dis_loss"],
+                            model["d_train_op"]])
+
 
             for _ in xrange(g_train_iter_per_step):
-              gl, _ = sess.run([model["g_loss"], model["g_train_op"]])
+              gl, src_gen_l, trg_gen_l, trg_tid_l, src_const_l, _ =
+                  sess.run([model["g_loss"],
+                            model["src_gen_loss"],
+                            model["trg_gen_loss"],
+                            model["trg_tid_loss"],
+                            model["src_const_loss"],
+                            model["g_train_op"]])
 
             duration = time.time() - start_time
             start_time = time.time()
-            tf.logging.info("step: %d, d_loss: %.6f, " \
-                "g_loss: %.6f, step/sec: %.3f"
-                % (step + 1, dl, gl, FLAGS.log_period / duration))
+            tf.logging.info("step: %d, step/sec: %.3f, d_loss %.6f = " \
+                "src_dis_loss %.6f + trg_dis_loss %.6f + trg_real_dis_loss %.6f"
+                % (step + 1, FLAGS.log_period / duration, dl, src_dis_l, trg_dis_l, trg_real_dis_l))
+            tf.logging.info("g_loss %.6f = src_gen_loss %.6f + trg_gen_loss %.6f +" \
+                "trg_tid_loss %.6f + src_const_loss %.6f"
+                % (gl, src_gen_l, trg_gen_l, trg_tid_l, src_const_l))
 
           else:
             # train d and g
