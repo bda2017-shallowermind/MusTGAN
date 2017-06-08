@@ -338,7 +338,7 @@ class Solver(object):
                             model["src_dis_loss"],
                             model["trg_dis_loss"],
                             model["trg_real_dis_loss"],
-                            model["avg_accuracy"]
+                            model["avg_accuracy"],
                             model["d_train_op"]])
 
 
