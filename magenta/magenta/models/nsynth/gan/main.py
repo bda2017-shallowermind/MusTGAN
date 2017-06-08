@@ -4,7 +4,7 @@ from solver import Solver
 
 FLAGS = tf.app.flags.FLAGS
 
-tf.app.flags.DEFINE_string("mode", None, "'pretrain', 'train' or 'eval'")
+tf.app.flags.DEFINE_string("mode", None, "'pretrain', 'd_pretrain', 'train' or 'eval'")
 tf.app.flags.DEFINE_integer("total_batch_size", 4,
                             "Batch size spread across all GPU replicas.")
 tf.app.flags.DEFINE_integer("num_gpus", 1,
@@ -20,6 +20,8 @@ tf.app.flags.DEFINE_string("trg_wav_path", None,
                            "Path of trg domain wav files for GAN training.")
 tf.app.flags.DEFINE_string("pretrain_path", None,
                            "Path of model checkpoint and summary logs for pretraining.")
+tf.app.flags.DEFINE_string("d_pretrain_path", None,
+                           "Path of model checkpoint and summary logs for d_pretraining.")
 tf.app.flags.DEFINE_string("train_path", None,
                            "Path of model checkpoint and summary logs for GAN training.")
 tf.app.flags.DEFINE_string("transferred_save_path", None,
@@ -62,6 +64,10 @@ def main(unused_argv=None):
     if not tf.gfile.Exists(FLAGS.pretrain_path):
       tf.gfile.MakeDirs(FLAGS.pretrain_path)
     solver.pretrain()
+  elif FLAGS.mode == "d_pretrain":
+    if not tf.gfile.Exists(FLAGS.d_pretrain_path):
+      tf.gfile.MakeDirs(FLAGS.d_pretrain_path)
+    solver.d_pretrain()
   elif FLAGS.mode == "train":
     if not tf.gfile.Exists(FLAGS.train_path):
       tf.gfile.MakeDirs(FLAGS.train_path)

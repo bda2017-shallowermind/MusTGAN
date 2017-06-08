@@ -25,7 +25,7 @@
   },
   "alpha": 30.0,
   "beta": 5.0,
-  "g_train_iter_per_step": 5,
-  "d_train_iter_per_step": 1,
-  "ae_num_layers": 20
+  "g_train_iter_per_step": 10,
+  "d_train_iter_per_step": 2,
+  "ae_num_layers": 10
 }

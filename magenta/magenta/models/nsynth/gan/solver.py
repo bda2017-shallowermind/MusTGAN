@@ -18,7 +18,7 @@ class Solver(object):
     self.sess_config = tf.ConfigProto()
     self.sess_config.allow_soft_placement = True
 
-  def get_batch_from_queue(self, path, batch_size, length=6144):
+  def get_batch_from_queue(self, path, batch_size, length=6144, pitch=True):
     def get_example(path, batch_size):
       """Get a single example from the tfrecord file.
 
@@ -56,7 +56,13 @@ class Solver(object):
 
     # labeling
     # TODO: cleanup this code
-    label = example["pitch"]
+    if pitch:
+      label = example["pitch"] 
+    else:
+      label = example["instrument_family"]
+      label = tf.cast(label, tf.int64)
+      label = ( label - 1 ) / 7
+
     label = tf.reshape(label, [])
 
     num_preprocess_threads = 4
@@ -106,7 +112,7 @@ class Solver(object):
             ckpt_path = os.path.join(FLAGS.pretrain_path, "model.ckpt-%d" % FLAGS.ckpt_id)
 
         if ckpt_path is None:
-          tf.logging.info("Skip loading checkpoint, start training from scartch...")
+          tf.logging.info("Skip loading checkpoint, start training from scratch...")
         else:
           variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
           restorer = tf.train.Saver(variables_to_restore)
@@ -144,6 +150,86 @@ class Solver(object):
           else:
             sess.run(model["train_op"])
 
+
+  def d_pretrain(self):
+    FLAGS = self.FLAGS
+    num_gpus = self.model.num_gpus
+
+    with tf.Graph().as_default() as graph:
+      train_files = glob.glob(FLAGS.wav_path + "/*")
+      if (len(train_files) < num_gpus):
+        raise RuntimeError("Number of training files: %d, while number of gpus: %d"
+            % (len(train_files), num_gpus))
+      elif (len(train_files) > num_gpus):
+        tf.logging.warning("Number of training files: %d, while number of gpus: %d"
+            % (len(train_files), num_gpus))
+      train_files = train_files[:num_gpus]
+
+      wavs = []
+      labels = []
+      for i in range(num_gpus):
+        with tf.device('/gpu:%d' % i):
+          with tf.name_scope('gpu_name_scope_%d' % i):
+            wav, label = self.get_batch_from_queue(
+                train_files[i], self.model.batch_size, pitch=False)
+            wavs.append(wav)
+            labels.append(label)
+
+      model = self.model.build_d_pretrain_model(wavs, labels)
+
+      with tf.Session(config=self.sess_config) as sess:
+        global_init = tf.global_variables_initializer()
+        sess.run(global_init)
+        tf.logging.info("Finished initialization")
+
+        ckpt_path = None
+        if not FLAGS.from_scratch:
+          if FLAGS.ckpt_id is None:
+            ckpt_path = tf.train.latest_checkpoint(FLAGS.d_pretrain_path)
+          else:
+            ckpt_path = os.path.join(FLAGS.d_pretrain_path, "model.ckpt-%d" % FLAGS.ckpt_id)
+
+        if ckpt_path is None:
+          tf.logging.info("Skip loading checkpoint, start training from scratch...")
+        else:
+          variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+          restorer = tf.train.Saver(variables_to_restore)
+          restorer.restore(sess, ckpt_path)
+          tf.logging.info("Complete restoring parameters from %s" % ckpt_path)
+
+        from_step = sess.run(model["global_step"])
+
+        tf.train.start_queue_runners(sess=sess)
+        summary_writer = tf.summary.FileWriter(
+            logdir=FLAGS.d_pretrain_path,
+            graph=sess.graph)
+        tf.train.write_graph(sess.graph, FLAGS.d_pretrain_path, "graph.pbtxt", as_text=True)
+        saver = tf.train.Saver()
+        tf.logging.info("Start running")
+
+        start_time = time.time()
+        for step in xrange(from_step, FLAGS.pretrain_iter):
+          if step % FLAGS.ckpt_period == 0:
+            saver.save(sess, os.path.join(
+                FLAGS.d_pretrain_path, 'model.ckpt'), global_step=step)
+            start_time = time.time()
+
+          if (step + 1) % FLAGS.log_period == 0:
+            _, l, acc = sess.run([
+                model["train_op"],
+                model["loss"],
+                model["accuracy"]])
+            duration = time.time() - start_time
+            start_time = time.time()
+            tf.logging.info("step: %d, loss: %.6f, acc: %.4f, step/sec: %.3f"
+                % (step + 1, l, acc, FLAGS.log_period / duration))
+            #input_labels, predict_labels = sess.run([
+            #    model["input_labels"],
+            #    model["predict_labels"]])
+            #print(input_labels)
+            #print(predict_labels)
+          else:
+            sess.run(model["train_op"])
 
   def train(self):
     FLAGS = self.FLAGS
@@ -196,7 +282,7 @@ class Solver(object):
             ckpt_path = os.path.join(FLAGS.train_path, "model.ckpt-" + FLAGS.ckpt_id)
 
         if ckpt_path is None:
-          tf.logging.info("Skip loading checkpoint, start training from scartch...")
+          tf.logging.info("Skip loading checkpoint, start training from scratch...")
           if FLAGS.pretrain_path is None:
             tf.logging.warning("pretrain_path is not specified, start from random f parameters")
           else:
@@ -204,6 +290,14 @@ class Solver(object):
             restorer = tf.train.Saver(model["restore_from_pretrain_vars"])
             restorer.restore(sess, pretrain_ckpt_path)
             tf.logging.info("Complete restoring pretrained parameters (variable scope f) from %s" % pretrain_ckpt_path)
+
+          if FLAGS.d_pretrain_path is None:
+            tf.logging.warning("d_pretrain_path is not specified, start from random d parameters")
+          else:
+            d_pretrain_ckpt_path = tf.train.latest_checkpoint(FLAGS.d_pretrain_path)
+            restorer = tf.train.Saver(model["restore_from_d_pretrain_vars"])
+            restorer.restore(sess, d_pretrain_ckpt_path)
+            tf.logging.info("Complete restoring pretrained parameters (variable scope f_for_d) from %s" % d_pretrain_ckpt_path)
         else:
           variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
           restorer = tf.train.Saver(variables_to_restore)

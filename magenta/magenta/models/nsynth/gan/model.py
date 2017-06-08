@@ -143,8 +143,9 @@ class MusTGAN(object):
           lambda: tf.constant(value))
     return lr
 
-  def f(self, x, reuse):
-    with tf.variable_scope('f', reuse=reuse):
+  def f(self, x, reuse, for_d=False):
+    scope = 'f_for_d' if for_d else 'f'
+    with tf.variable_scope(scope, reuse=reuse):
       ae_num_stages = self.ae_num_stages
       ae_num_layers = self.ae_num_layers
       ae_filter_length = self.ae_filter_length
@@ -198,6 +199,13 @@ class MusTGAN(object):
 
     return en
 
+  def f_for_d(self, x, reuse, pretrain=False):
+    if pretrain:
+      with tf.variable_scope('discriminator', reuse=reuse):
+        return self.f(x, reuse, for_d=True)
+    else:
+      return self.f(x, reuse, for_d=True)
+
   def g(self, encoding, reuse):
     with tf.variable_scope('g', reuse=reuse):
       de = encoding
@@ -250,7 +258,7 @@ class MusTGAN(object):
 
   def discriminator(self, x, reuse):
     with tf.variable_scope('discriminator', reuse=reuse):
-      fx = self.f(x, reuse)
+      fx = self.f_for_d(x, reuse)
 
       with tf.variable_scope('pool', reuse=reuse):
         fx_reshaped = tf.reshape(fx, [self.batch_size, -1])
@@ -316,6 +324,66 @@ class MusTGAN(object):
     #     total_num_replicas=1, # worker_replicas
     #     variable_averages=ema,
     #     variables_to_average=tf.trainable_variables())
+
+    maintain_averages_op = ema.apply(tf.trainable_variables())
+
+    with tf.control_dependencies([opt_op]):
+      train_op = tf.group(maintain_averages_op)
+
+    return {
+        'global_step': global_step,
+        'loss': avg_loss,
+        'train_op': train_op,
+        'accuracy': avg_accuracy,
+    }
+
+  def build_d_pretrain_model(self, input_wavs, input_labels):
+    assert len(input_wavs) == self.num_gpus
+    assert len(input_labels) == self.num_gpus
+
+    with tf.device('/cpu:0'):
+      global_step = tf.train.get_or_create_global_step()
+
+      lr = self.lr_schedule(global_step, self.pretrain_lr_schedule)
+
+      losses = []
+      accuracies = []
+      for i in range(self.num_gpus):
+        input_wav = input_wavs[i]
+        input_label = input_labels[i]
+        reuse = False if i == 0 else True
+
+        with tf.device('/gpu:%d' % i):
+          with tf.name_scope('gpu_name_scope_%d' % i):
+            # build the model graph
+            mu_law_input_wav = self.mu_law(input_wav)
+            en = self.f_for_d(mu_law_input_wav, reuse=reuse, pretrain=True)
+            net = tf.reshape(en, [self.batch_size, -1])
+
+            with tf.variable_scope('d_pretrain_fc', reuse=reuse):
+              net = tf.layers.dense(inputs=net, units=512, activation=None)
+              net = tf.layers.dense(inputs=net, units=512, activation=None)
+              net = tf.layers.dense(inputs=net, units=2, activation=None)
+
+            correct_pred = tf.equal(tf.argmax(net, 1), input_label)
+            accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+            accuracies.append(accuracy)
+
+            loss = tf.reduce_mean(x_entropy_loss(labels=input_label, logits=net))
+            losses.append(loss)
+
+      avg_loss = tf.reduce_mean(losses)
+      avg_accuracy = tf.reduce_mean(accuracies)
+
+      ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=global_step)
+
+    opt = tf.train.AdamOptimizer(lr, epsilon=1e-8)
+    opt_op = opt.minimize(
+        avg_loss,
+        global_step=global_step,
+        var_list=tf.trainable_variables(),
+        colocate_gradients_with_ops=True)
 
     maintain_averages_op = ema.apply(tf.trainable_variables())
 
@@ -397,10 +465,13 @@ class MusTGAN(object):
 
       d_loss = tf.reduce_mean(d_losses)
       g_loss = tf.reduce_mean(g_losses)
+      f_for_d_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator/f_for_d')
       d_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
       g_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='g')
       f_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='f')
 
+      f_for_d_ema = tf.train.ExponentialMovingAverage(
+          decay=0.9999, num_updates=d_step)
       d_ema = tf.train.ExponentialMovingAverage(
           decay=0.9999, num_updates=d_step)
       g_ema = tf.train.ExponentialMovingAverage(
@@ -436,6 +507,11 @@ class MusTGAN(object):
     for var in f_vars:
       restore_from_pretrain_vars[f_ema.average_name(var)] = var
 
+    restore_from_d_pretrain_vars = {}
+    for var in f_for_d_vars:
+      # very risky code... it's my best :(
+      restore_from_d_pretrain_vars[f_for_d_ema.average_name(var)[:-2]] = var
+
     return {
         'global_step': global_step,
         'global_step_inc': global_step_inc,
@@ -444,6 +520,7 @@ class MusTGAN(object):
         'd_train_op': d_train_op,
         'g_train_op': g_train_op,
         'restore_from_pretrain_vars': restore_from_pretrain_vars,
+        'restore_from_d_pretrain_vars': restore_from_d_pretrain_vars,
     }
 
   def build_eval_model(self, input_wavs):
